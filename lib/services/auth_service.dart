@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user.dart';
+import 'settings_service.dart';
 
 class AuthService {
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'user_data';
   
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  final SettingsService _settingsService = SettingsService();
 
   Future<User?> login(String username, String password) async {
     try {
@@ -83,5 +85,10 @@ class AuthService {
 
   bool isValidUsername(String username) {
     return username.length >= 3 && RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(username);
+  }
+
+  /// Получить базовый URL для API запросов
+  Future<String> getApiBaseUrl() async {
+    return await _settingsService.getApiBaseUrl();
   }
 }

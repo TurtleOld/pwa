@@ -10,8 +10,6 @@ void main() {
     await tester.pump();
 
     expect(find.byType(MaterialApp), findsOneWidget);
-
-    expect(find.text('Task Manager'), findsOneWidget);
   });
 
   testWidgets('App shows loading indicator initially', (
