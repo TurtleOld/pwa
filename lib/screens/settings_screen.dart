@@ -1,33 +1,47 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
-import 'settings_screen.dart';
+import '../services/settings_service.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SettingsScreenState extends State<SettingsScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  final _serverUrlController = TextEditingController();
+  final _settingsService = SettingsService();
   
   bool _isLoading = false;
-  bool _obscurePassword = true;
+  String? _successMessage;
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+    _loadServerUrl();
+  }
+
+  @override
   void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
+    _serverUrlController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _loadServerUrl() async {
+    try {
+      final serverUrl = await _settingsService.getServerUrl();
+      _serverUrlController.text = serverUrl;
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Ошибка загрузки настроек';
+      });
+    }
+  }
+
+  Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -35,26 +49,27 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _successMessage = null;
     });
 
     try {
-      final user = await _authService.login(
-        _usernameController.text.trim(),
-        _passwordController.text,
-      );
+      await _settingsService.setServerUrl(_serverUrlController.text);
 
-      if (mounted) {
-        if (user != null) {
-          Navigator.of(context).pushReplacementNamed('/home');
-        } else {
+      setState(() {
+        _successMessage = 'Настройки сохранены успешно';
+      });
+
+      // Скрыть сообщение об успехе через 3 секунды
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
           setState(() {
-            _errorMessage = 'Ошибка авторизации';
+            _successMessage = null;
           });
         }
-      }
+      });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = 'Ошибка сохранения настроек: $e';
       });
     } finally {
       if (mounted) {
@@ -65,24 +80,26 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _navigateToSettings() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (context) => const SettingsScreen()));
+  String? _validateServerUrl(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Введите URL сервера';
+    }
+    
+    if (!_settingsService.isValidServerUrl(value)) {
+      return 'URL должен начинаться с http:// или https:// и быть корректным';
+    }
+    
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        title: const Text('Настройки'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.white,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: AppColors.white, size: 28),
-            onPressed: _navigateToSettings,
-            tooltip: 'Настройки',
-          ),
-        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -113,13 +130,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Icon(
-                          Icons.task_alt,
+                          Icons.settings,
                           size: 64,
                           color: AppColors.primary,
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Task Manager',
+                          'Настройки сервера',
                           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             color: AppColors.primary,
                             fontWeight: FontWeight.bold,
@@ -128,7 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Войдите в свой аккаунт',
+                          'Укажите URL сервера для подключения к API',
                           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: AppColors.textSecondary,
                           ),
@@ -137,58 +154,50 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 32),
 
                         TextFormField(
-                          controller: _usernameController,
+                          controller: _serverUrlController,
                           decoration: const InputDecoration(
-                            labelText: 'Имя пользователя',
-                            hintText: 'Введите имя пользователя',
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                          textInputAction: TextInputAction.next,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Введите имя пользователя';
-                            }
-                            if (!_authService.isValidUsername(value)) {
-                              return 'Имя пользователя должно содержать только буквы, цифры и _';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: 'Пароль',
-                            hintText: 'Введите пароль',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
+                            labelText: 'URL сервера',
+                            hintText: 'https://example.com/api',
+                            prefixIcon: Icon(Icons.link),
+                            helperText: 'Введите полный URL сервера с протоколом',
                           ),
                           textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _handleLogin(),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Введите пароль';
-                            }
-                            if (!_authService.isValidPassword(value)) {
-                              return 'Пароль должен содержать минимум 6 символов';
-                            }
-                            return null;
-                          },
+                          keyboardType: TextInputType.url,
+                          validator: _validateServerUrl,
                         ),
                         const SizedBox(height: 24),
+
+                        if (_successMessage != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.success.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle_outline,
+                                  color: AppColors.success,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _successMessage!,
+                                    style: TextStyle(
+                                      color: AppColors.success,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
 
                         if (_errorMessage != null)
                           Container(
@@ -223,7 +232,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
 
                         ElevatedButton(
-                          onPressed: _isLoading ? null : _handleLogin,
+                          onPressed: _isLoading ? null : _saveSettings,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -242,7 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 )
                               : const Text(
-                                  'Войти',
+                                  'Сохранить настройки',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -251,12 +260,17 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        Text(
-                          'Для демонстрации введите любое имя пользователя и пароль',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textMuted,
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text(
+                            'Назад к авторизации',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
