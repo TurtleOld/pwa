@@ -44,7 +44,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         if (user != null) {
-          // Переход на главную страницу
           Navigator.of(context).pushReplacementNamed('/home');
         } else {
           setState(() {
@@ -96,7 +95,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Логотип/Заголовок
                         Icon(
                           Icons.task_alt,
                           size: 64,
@@ -121,7 +119,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 32),
 
-                        // Поле имени пользователя
                         TextFormField(
                           controller: _usernameController,
                           decoration: const InputDecoration(
@@ -142,7 +139,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Поле пароля
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
@@ -177,7 +173,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Сообщение об ошибке
                         if (_errorMessage != null)
                           Container(
                             padding: const EdgeInsets.all(12),
@@ -210,7 +205,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
 
-                        // Кнопка входа
                         ElevatedButton(
                           onPressed: _isLoading ? null : _handleLogin,
                           style: ElevatedButton.styleFrom(
@@ -240,7 +234,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Дополнительная информация
                         Text(
                           'Для демонстрации введите любое имя пользователя и пароль',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
