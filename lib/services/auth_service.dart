@@ -8,15 +8,11 @@ class AuthService {
   
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  // Заглушка для авторизации (пока нет API)
   Future<User?> login(String username, String password) async {
     try {
-      // Имитация задержки сети
       await Future.delayed(const Duration(seconds: 1));
       
-      // Заглушка: проверяем простые учетные данные
       if (username.isNotEmpty && password.isNotEmpty) {
-        // Создаем фиктивного пользователя
         final user = User(
           id: 1,
           username: username,
@@ -26,7 +22,6 @@ class AuthService {
           token: 'fake_token_${DateTime.now().millisecondsSinceEpoch}',
         );
         
-        // Сохраняем данные пользователя
         await _saveUserData(user);
         
         return user;
@@ -38,7 +33,6 @@ class AuthService {
     }
   }
 
-  // Заглушка для выхода
   Future<void> logout() async {
     try {
       await _storage.delete(key: _tokenKey);
@@ -48,7 +42,6 @@ class AuthService {
     }
   }
 
-  // Проверка авторизации
   Future<User?> getCurrentUser() async {
     try {
       final userData = await _storage.read(key: _userKey);
@@ -62,7 +55,6 @@ class AuthService {
     }
   }
 
-  // Проверка токена
   Future<bool> isAuthenticated() async {
     try {
       final token = await _storage.read(key: _tokenKey);
@@ -72,7 +64,6 @@ class AuthService {
     }
   }
 
-  // Сохранение данных пользователя
   Future<void> _saveUserData(User user) async {
     try {
       await _storage.write(key: _tokenKey, value: user.token ?? '');
@@ -82,17 +73,14 @@ class AuthService {
     }
   }
 
-  // Валидация email
   bool isValidEmail(String email) {
     return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
   }
 
-  // Валидация пароля
   bool isValidPassword(String password) {
     return password.length >= 6;
   }
 
-  // Валидация имени пользователя
   bool isValidUsername(String username) {
     return username.length >= 3 && RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(username);
   }

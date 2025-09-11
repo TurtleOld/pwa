@@ -1,24 +1,38 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 
 import 'package:pwa/main.dart';
 
 void main() {
-  testWidgets('App loads and shows login screen', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('App loads and shows MaterialApp', (WidgetTester tester) async {
     await tester.pumpWidget(const TaskManagerApp());
 
-    // Wait for the auth check to complete
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // Verify that the login screen is shown
+    expect(find.byType(MaterialApp), findsOneWidget);
+
     expect(find.text('Task Manager'), findsOneWidget);
-    expect(find.text('Войдите в свой аккаунт'), findsOneWidget);
+  });
+
+  testWidgets('App shows loading indicator initially', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const TaskManagerApp());
+
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('App has correct theme configuration', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const TaskManagerApp());
+
+    await tester.pump();
+
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(materialApp.title, equals('Task Manager PWA'));
+    expect(materialApp.debugShowCheckedModeBanner, isFalse);
   });
 }

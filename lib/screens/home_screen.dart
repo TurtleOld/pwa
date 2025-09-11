@@ -91,7 +91,6 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Приветствие
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
@@ -147,7 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Статистика (заглушка)
                 Text(
                   'Статистика',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -200,7 +198,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Быстрые действия
                 Text(
                   'Быстрые действия',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
