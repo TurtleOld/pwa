@@ -80,7 +80,7 @@ void main() {
       await tester.pump();
 
       // Вводим корректный URL
-      await tester.enterText(find.byType(TextFormField), 'https://example.com/api');
+      await tester.enterText(find.byType(TextFormField), 'https://example.com');
       await tester.tap(find.text('Сохранить настройки'));
       await tester.pump();
 

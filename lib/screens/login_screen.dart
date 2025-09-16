@@ -15,10 +15,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
-  
+
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  bool _isEmail = false;
 
   @override
   void dispose() {
@@ -89,10 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primary,
-              AppColors.primaryDark,
-            ],
+            colors: [AppColors.primary, AppColors.primaryDark],
           ),
         ),
         child: SafeArea(
@@ -120,36 +118,76 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                         Text(
                           'Task Manager',
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Войдите в свой аккаунт',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(color: AppColors.textSecondary),
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 32),
 
                         TextFormField(
                           controller: _usernameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Имя пользователя',
-                            hintText: 'Введите имя пользователя',
-                            prefixIcon: Icon(Icons.person_outline),
+                          decoration: InputDecoration(
+                            labelText: _isEmail ? 'Email' : 'Имя пользователя',
+                            hintText: _isEmail
+                                ? 'Введите email'
+                                : 'Введите имя пользователя',
+                            prefixIcon: Icon(
+                              _isEmail
+                                  ? Icons.email_outlined
+                                  : Icons.person_outline,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _isEmail
+                                    ? Icons.person_outline
+                                    : Icons.email_outlined,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _isEmail = !_isEmail;
+                                });
+                              },
+                              tooltip: _isEmail
+                                  ? 'Переключить на имя пользователя'
+                                  : 'Переключить на email',
+                            ),
                           ),
+                          keyboardType: _isEmail
+                              ? TextInputType.emailAddress
+                              : TextInputType.text,
                           textInputAction: TextInputAction.next,
+                          onChanged: (value) {
+                            // Автоматически определяем тип ввода
+                            if (value.contains('@')) {
+                              setState(() {
+                                _isEmail = true;
+                              });
+                            }
+                          },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Введите имя пользователя';
+                              return _isEmail
+                                  ? 'Введите email'
+                                  : 'Введите имя пользователя';
                             }
-                            if (!_authService.isValidUsername(value)) {
-                              return 'Имя пользователя должно содержать только буквы, цифры и _';
+                            if (_isEmail) {
+                              if (!_authService.isValidEmail(value)) {
+                                return 'Введите корректный email';
+                              }
+                            } else {
+                              if (!_authService.isValidUsername(value)) {
+                                return 'Имя пользователя должно содержать только буквы, цифры и _';
+                              }
                             }
                             return null;
                           },
@@ -252,10 +290,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
 
                         Text(
-                          'Для демонстрации введите любое имя пользователя и пароль',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textMuted,
-                          ),
+                          'Введите email или имя пользователя и пароль для входа',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: AppColors.textMuted),
                           textAlign: TextAlign.center,
                         ),
                       ],
