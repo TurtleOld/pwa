@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../models/task.dart';
+import '../models/stage.dart';
+import '../services/task_service.dart';
 import '../services/auth_service.dart';
-import '../models/user.dart';
+import '../widgets/stage_column.dart';
 import '../theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -11,27 +14,157 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _authService = AuthService();
-  User? _currentUser;
+  final TaskService _taskService = TaskService();
+  final AuthService _authService = AuthService();
+
+  List<Task> _tasks = [];
+  List<Stage> _stages = [];
   bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _loadData();
   }
 
-  Future<void> _loadUserData() async {
+  Future<void> _loadData() async {
     try {
-      final user = await _authService.getCurrentUser();
       setState(() {
-        _currentUser = user;
+        _isLoading = true;
+        _error = null;
+      });
+
+      // Проверяем аутентификацию
+      final isAuth = await _authService.isAuthenticated();
+      if (!isAuth) {
+        throw Exception('Пользователь не аутентифицирован');
+      }
+
+      final stages = await _taskService.getStages();
+      final tasks = await _taskService.getTasks();
+
+      setState(() {
+        _stages = stages;
+        _tasks = tasks;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
+        _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _refreshData() async {
+    await _loadData();
+  }
+
+  Future<void> _createTask() async {
+    final result = await _showCreateTaskDialog();
+    if (result != null) {
+      try {
+        await _taskService.createTask(
+          name: result['name'] as String,
+          description: result['description'] as String?,
+          stage: result['stage'] as int?,
+        );
+        await _refreshData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Задача создана успешно'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка создания задачи: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _editTask(Task task) async {
+    final result = await _showEditTaskDialog(task);
+    if (result != null) {
+      try {
+        await _taskService.updateTask(
+          taskId: task.id,
+          name: result['name'] as String?,
+          description: result['description'] as String?,
+          stage: result['stage'] as int?,
+          state: result['state'] as bool?,
+        );
+        await _refreshData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Задача обновлена успешно'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка обновления задачи: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _deleteTask(Task task) async {
+    final confirmed = await _showDeleteConfirmation(task);
+    if (confirmed == true) {
+      try {
+        await _taskService.deleteTask(task.id);
+        await _refreshData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Задача удалена успешно'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка удаления задачи: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _moveTaskToStage(Task task, Stage newStage) async {
+    try {
+      await _taskService.moveTaskToStage(task.id, newStage.id);
+      await _refreshData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка перемещения задачи: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      }
     }
   }
 
@@ -53,12 +186,63 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  List<Task> _getTasksForStage(int stageId) {
+    return _tasks.where((task) => task.stage == stageId).toList()
+      ..sort((a, b) => a.order.compareTo(b.order));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Task Manager'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () => Navigator.of(context).pushNamed('/settings'),
+              tooltip: 'Настройки',
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: _handleLogout,
+              tooltip: 'Выйти',
+            ),
+          ],
+        ),
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppColors.danger,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Ошибка загрузки данных',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _refreshData,
+                child: const Text('Повторить'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -67,6 +251,21 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Task Manager'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshData,
+            tooltip: 'Обновить',
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _createTask,
+            tooltip: 'Создать задачу',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.of(context).pushNamed('/settings'),
+            tooltip: 'Настройки',
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: _handleLogout,
@@ -79,233 +278,70 @@ class _HomeScreenState extends State<HomeScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              AppColors.bgSecondary,
-              AppColors.bgTertiary,
-            ],
+            colors: [AppColors.bgSecondary, AppColors.bgTertiary],
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Card(
+          child: _stages.isEmpty
+              ? _buildEmptyState()
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 30,
-                              backgroundColor: AppColors.primary,
-                              child: Text(
-                                _currentUser?.username.substring(0, 1).toUpperCase() ?? 'U',
-                                style: const TextStyle(
-                                  color: AppColors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Добро пожаловать!',
-                                    style: Theme.of(context).textTheme.titleLarge,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _currentUser?.username ?? 'Пользователь',
-                                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  if (_currentUser?.email != null)
-                                    Text(
-                                      _currentUser!.email,
-                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      children: _stages.map((stage) {
+                        final stageTasks = _getTasksForStage(stage.id);
+                        return StageColumn(
+                          stage: stage,
+                          tasks: stageTasks,
+                          onTaskMoved: _moveTaskToStage,
+                          onTaskTap: (task) => _editTask(task),
+                          onTaskEdit: _editTask,
+                          onTaskDelete: _deleteTask,
+                          onAddTask: () => _createTaskForStage(stage),
+                        );
+                      }).toList(),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-
-                Text(
-                  'Статистика',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'Активные задачи',
-                        '12',
-                        Icons.task_alt,
-                        AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Завершенные',
-                        '8',
-                        Icons.check_circle,
-                        AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        'В процессе',
-                        '5',
-                        Icons.hourglass_empty,
-                        AppColors.warning,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildStatCard(
-                        'Просроченные',
-                        '2',
-                        Icons.warning,
-                        AppColors.danger,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-
-                Text(
-                  'Быстрые действия',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionCard(
-                        'Создать задачу',
-                        Icons.add_task,
-                        AppColors.primary,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Функция будет добавлена позже'),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildActionCard(
-                        'Просмотр задач',
-                        Icons.list_alt,
-                        AppColors.info,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Функция будет добавлена позже'),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildActionCard(
-                        'Настройки',
-                        Icons.settings,
-                        AppColors.gray600,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Функция будет добавлена позже'),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildActionCard(
-                        'Профиль',
-                        Icons.person,
-                        AppColors.secondary,
-                        () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Функция будет добавлена позже'),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Card(
+  Widget _buildEmptyState() {
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(32.0),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 32,
-              color: color,
+            const Icon(
+              Icons.dashboard_outlined,
+              size: 64,
+              color: AppColors.gray600,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Kanban Доска',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              value,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
+              'Создайте первую задачу, чтобы начать работу',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _createTask,
+              icon: const Icon(Icons.add),
+              label: const Text('Создать задачу'),
             ),
           ],
         ),
@@ -313,32 +349,215 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildActionCard(String title, IconData icon, Color color, VoidCallback onTap) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+  Future<void> _createTaskForStage(Stage stage) async {
+    final result = await _showCreateTaskDialog(initialStage: stage);
+    if (result != null) {
+      try {
+        await _taskService.createTask(
+          name: result['name'] as String,
+          description: result['description'] as String?,
+          stage: stage.id,
+        );
+        await _refreshData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Задача создана успешно'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка создания задачи: $e'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showCreateTaskDialog({
+    Stage? initialStage,
+  }) async {
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    Stage? selectedStage = initialStage ?? _stages.first;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Создать задачу'),
+        content: SingleChildScrollView(
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 32,
-                color: color,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w500,
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Название задачи',
+                  border: OutlineInputBorder(),
                 ),
-                textAlign: TextAlign.center,
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Описание (необязательно)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<Stage>(
+                value: selectedStage,
+                decoration: const InputDecoration(
+                  labelText: 'Этап',
+                  border: OutlineInputBorder(),
+                ),
+                items: _stages.map((stage) {
+                  return DropdownMenuItem(
+                    value: stage,
+                    child: Text(stage.displayName),
+                  );
+                }).toList(),
+                onChanged: (stage) {
+                  selectedStage = stage;
+                },
               ),
             ],
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.trim().isNotEmpty) {
+                Navigator.of(context).pop({
+                  'name': nameController.text.trim(),
+                  'description': descriptionController.text.trim().isEmpty
+                      ? null
+                      : descriptionController.text.trim(),
+                  'stage': selectedStage?.id,
+                });
+              }
+            },
+            child: const Text('Создать'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>?> _showEditTaskDialog(Task task) async {
+    final nameController = TextEditingController(text: task.name);
+    final descriptionController = TextEditingController(text: task.description);
+    Stage? selectedStage = _stages.firstWhere(
+      (stage) => stage.id == task.stage,
+      orElse: () => _stages.first,
+    );
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Редактировать задачу'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Название задачи',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Описание',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<Stage>(
+                value: selectedStage,
+                decoration: const InputDecoration(
+                  labelText: 'Этап',
+                  border: OutlineInputBorder(),
+                ),
+                items: _stages.map((stage) {
+                  return DropdownMenuItem(
+                    value: stage,
+                    child: Text(stage.displayName),
+                  );
+                }).toList(),
+                onChanged: (stage) {
+                  selectedStage = stage;
+                },
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                title: const Text('Задача выполнена'),
+                value: task.state,
+                onChanged: (value) {
+                  // Обновляем состояние в диалоге
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.trim().isNotEmpty) {
+                Navigator.of(context).pop({
+                  'name': nameController.text.trim(),
+                  'description': descriptionController.text.trim().isEmpty
+                      ? null
+                      : descriptionController.text.trim(),
+                  'stage': selectedStage?.id,
+                  'state': task.state,
+                });
+              }
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _showDeleteConfirmation(Task task) async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить задачу'),
+        content: Text('Вы уверены, что хотите удалить задачу "${task.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('Удалить'),
+          ),
+        ],
       ),
     );
   }
