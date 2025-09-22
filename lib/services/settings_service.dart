@@ -81,7 +81,8 @@ class SettingsService {
 
       // Для локальной разработки
       if (hostname == 'localhost' || hostname == '127.0.0.1') {
-        return 'http://localhost:8000';
+        // Используем тот же хост, что и текущая страница
+        return 'http://$hostname:8000';
       }
 
       // Для продакшена - используем тот же домен

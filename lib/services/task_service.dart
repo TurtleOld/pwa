@@ -203,6 +203,10 @@ class TaskService {
       final apiBaseUrl = await _getApiBaseUrl();
       final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
       final headers = await _getHeaders();
+      
+      print('🔄 Moving task $taskId to stage $newStageId');
+      print('🌐 API URL: $url');
+      print('📋 Headers: $headers');
 
       final body = {'stage': newStageId};
 
