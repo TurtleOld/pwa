@@ -10,8 +10,6 @@ class TaskCard extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onMove;
   final Widget? dragHandle; // shown on desktop to initiate reordering
-  final Widget?
-  crossColumnHandle; // shown on desktop to initiate cross-column drag
 
   const TaskCard({
     super.key,
@@ -21,7 +19,6 @@ class TaskCard extends StatelessWidget {
     this.onDelete,
     this.onMove,
     this.dragHandle,
-    this.crossColumnHandle,
   });
 
   @override
@@ -157,7 +154,6 @@ class TaskCard extends StatelessWidget {
               size: ResponsiveUtils.getResponsiveFontSize(context, 20),
             ),
           ),
-        if (crossColumnHandle != null) crossColumnHandle!,
         if (dragHandle != null) dragHandle!,
       ],
     );

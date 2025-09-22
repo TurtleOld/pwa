@@ -252,35 +252,52 @@ class StageColumn extends StatelessWidget {
       },
       itemBuilder: (context, index) {
         final task = tasks[index];
-        return TaskCard(
+        return Container(
           key: ValueKey(task.id),
-          task: task,
-          onTap: () => onTaskTap?.call(task),
-          onEdit: () => onTaskEdit?.call(task),
-          onDelete: () => onTaskDelete?.call(task),
-          onMove: () => _showMoveSheet(context, task),
-          dragHandle: ReorderableDragStartListener(
-            index: index,
-            child: Icon(
-              Icons.drag_indicator,
-              color: AppColors.textSecondary,
-              size: ResponsiveUtils.getResponsiveFontSize(context, 20),
-            ),
-          ),
-          crossColumnHandle: Draggable<Task>(
+          margin: const EdgeInsets.only(bottom: 8.0),
+          child: Draggable<Task>(
             data: task,
             feedback: Material(
               color: Colors.transparent,
-              child: Opacity(opacity: 0.85, child: TaskCard(task: task)),
+              child: Transform.scale(
+                scale: 1.05,
+                child: Opacity(
+                  opacity: 0.9,
+                  child: TaskCard(task: task),
+                ),
+              ),
             ),
-            childWhenDragging: const SizedBox.shrink(),
-            dragAnchorStrategy: childDragAnchorStrategy,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 4.0),
-              child: Icon(
-                Icons.open_with,
-                color: AppColors.textSecondary,
-                size: ResponsiveUtils.getResponsiveFontSize(context, 18),
+            childWhenDragging: Opacity(
+              opacity: 0.3,
+              child: TaskCard(
+                task: task,
+                onTap: () => onTaskTap?.call(task),
+                onEdit: () => onTaskEdit?.call(task),
+                onDelete: () => onTaskDelete?.call(task),
+                onMove: () => _showMoveSheet(context, task),
+                dragHandle: ReorderableDragStartListener(
+                  index: index,
+                  child: Icon(
+                    Icons.drag_indicator,
+                    color: AppColors.textSecondary,
+                    size: ResponsiveUtils.getResponsiveFontSize(context, 20),
+                  ),
+                ),
+              ),
+            ),
+            child: TaskCard(
+              task: task,
+              onTap: () => onTaskTap?.call(task),
+              onEdit: () => onTaskEdit?.call(task),
+              onDelete: () => onTaskDelete?.call(task),
+              onMove: () => _showMoveSheet(context, task),
+              dragHandle: ReorderableDragStartListener(
+                index: index,
+                child: Icon(
+                  Icons.drag_indicator,
+                  color: AppColors.textSecondary,
+                  size: ResponsiveUtils.getResponsiveFontSize(context, 20),
+                ),
               ),
             ),
           ),
