@@ -167,17 +167,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _moveTaskToStage(Task task, Stage newStage) async {
     final previousStageId = task.stage;
-    
+
     // Optimistic update: сначала обновляем UI мгновенно
     final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
     if (taskIndex != -1) {
       final updatedTask = task.copyWith(stage: newStage.id);
-      
+
       setState(() {
         _tasks[taskIndex] = updatedTask;
       });
     }
-    
+
     // Затем синхронизируем с сервером в фоне
     try {
       await _taskService.moveTaskToStage(task.id, newStage.id);
@@ -195,12 +195,12 @@ class _HomeScreenState extends State<HomeScreen> {
       // Откат изменений при ошибке
       if (taskIndex != -1) {
         final revertedTask = task.copyWith(stage: previousStageId);
-        
+
         setState(() {
           _tasks[taskIndex] = revertedTask;
         });
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -223,12 +223,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final task = stageTasks[oldIndex];
     final originalOrder = task.order;
-    
+
     // Optimistic update: мгновенно обновляем порядок задач в UI
     final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
     if (taskIndex != -1) {
       final updatedTask = task.copyWith(order: newIndex);
-      
+
       setState(() {
         _tasks[taskIndex] = updatedTask;
       });
@@ -242,12 +242,12 @@ class _HomeScreenState extends State<HomeScreen> {
       // Откат изменений при ошибке
       if (taskIndex != -1) {
         final revertedTask = task.copyWith(order: originalOrder);
-        
+
         setState(() {
           _tasks[taskIndex] = revertedTask;
         });
       }
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

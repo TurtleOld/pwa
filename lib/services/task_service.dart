@@ -237,7 +237,8 @@ class TaskService {
         );
       }
     } catch (e) {
-      throw Exception('Ошибка перемещения задачи: $e');
+      final errorMessage = _getNetworkErrorMessage(e);
+      throw Exception('Ошибка перемещения задачи: $errorMessage');
     }
   }
 
@@ -259,7 +260,8 @@ class TaskService {
         throw Exception('Ошибка обновления порядка: ${response.statusCode}');
       }
     } catch (e) {
-      throw Exception('Ошибка обновления порядка: $e');
+      final errorMessage = _getNetworkErrorMessage(e);
+      throw Exception('Ошибка обновления порядка: $errorMessage');
     }
   }
 
@@ -328,5 +330,30 @@ class TaskService {
     }
 
     return 'Неизвестная ошибка';
+  }
+
+  /// Получить понятное сообщение об ошибке сети
+  String _getNetworkErrorMessage(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+
+    if (errorStr.contains('failed to fetch') ||
+        errorStr.contains('network error')) {
+      return 'Нет подключения к серверу. Проверьте интернет-соединение.';
+    }
+
+    if (errorStr.contains('connection refused') ||
+        errorStr.contains('connection timed out')) {
+      return 'Сервер недоступен. Попробуйте позже.';
+    }
+
+    if (errorStr.contains('cors')) {
+      return 'Ошибка CORS. Проверьте настройки сервера.';
+    }
+
+    if (errorStr.contains('0.0.0.0')) {
+      return 'Неправильный адрес сервера (0.0.0.0 недоступен из браузера)';
+    }
+
+    return error.toString();
   }
 }
