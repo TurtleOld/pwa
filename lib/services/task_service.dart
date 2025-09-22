@@ -203,7 +203,7 @@ class TaskService {
       final apiBaseUrl = await _getApiBaseUrl();
       final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
       final headers = await _getHeaders();
-      
+
       print('🔄 Moving task $taskId to stage $newStageId');
       print('🌐 API URL: $url');
       print('📋 Headers: $headers');
@@ -217,28 +217,49 @@ class TaskService {
           headers: headers,
           body: json.encode(body),
         );
+        print('📡 Response status: ${response.statusCode}');
+        print('📡 Response headers: ${response.headers}');
+        print('📡 Response body: ${response.body}');
       } catch (e) {
+        print('❌ Network error during PATCH: $e');
         // Сетевая ошибка: проверим, не обновилась ли задача на сервере
         final maybe = await getTaskById(taskId);
         if (maybe != null && maybe.stage == newStageId) {
+          print('✅ Task was updated despite network error');
           return maybe;
         }
+        print('❌ Task was not updated, rethrowing error');
         rethrow;
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        print('✅ Success response received');
         if (response.body.isNotEmpty) {
-          final data = json.decode(response.body);
-          return Task.fromJson(data);
+          try {
+            final data = json.decode(response.body);
+            print('📦 Parsed response data: $data');
+            final task = Task.fromJson(data);
+            print('✅ Task successfully parsed and returned');
+            return task;
+          } catch (e) {
+            print('❌ Error parsing response JSON: $e');
+            throw Exception('Ошибка парсинга ответа сервера: $e');
+          }
         }
+        print('⚠️ Empty response body, fetching task by ID');
         final maybe = await getTaskById(taskId);
         if (maybe != null) return maybe;
         throw Exception('Пустой ответ сервера');
       } else {
-        final errorData = json.decode(response.body);
-        throw Exception(
-          'Ошибка перемещения задачи: ${_parseErrorMessage(errorData)}',
-        );
+        print('❌ Error response: ${response.statusCode}');
+        try {
+          final errorData = json.decode(response.body);
+          throw Exception(
+            'Ошибка перемещения задачи: ${_parseErrorMessage(errorData)}',
+          );
+        } catch (e) {
+          throw Exception('Ошибка сервера: ${response.statusCode} - ${response.body}');
+        }
       }
     } catch (e) {
       final errorMessage = _getNetworkErrorMessage(e);
