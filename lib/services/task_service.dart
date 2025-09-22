@@ -22,6 +22,22 @@ class TaskService {
     };
   }
 
+  Future<Task?> getTaskById(int taskId) async {
+    try {
+      final apiBaseUrl = await _getApiBaseUrl();
+      final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
+      final headers = await _getHeaders();
+      final response = await http.get(url, headers: headers);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return Task.fromJson(data);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Получить все задачи
   Future<List<Task>> getTasks() async {
     try {
@@ -133,15 +149,28 @@ class TaskService {
       if (deadline != null) body['deadline'] = deadline.toIso8601String();
       if (state != null) body['state'] = state;
 
-      final response = await http.patch(
-        url,
-        headers: headers,
-        body: json.encode(body),
-      );
+      http.Response response;
+      try {
+        response = await http.patch(
+          url,
+          headers: headers,
+          body: json.encode(body),
+        );
+      } catch (e) {
+        // В случае сетевой ошибки пробуем перечитать задачу
+        final fallback = await getTaskById(taskId);
+        if (fallback != null) return fallback;
+        rethrow;
+      }
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return Task.fromJson(data);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isNotEmpty) {
+          final data = json.decode(response.body);
+          return Task.fromJson(data);
+        }
+        final fallback = await getTaskById(taskId);
+        if (fallback != null) return fallback;
+        throw Exception('Пустой ответ сервера');
       } else {
         final errorData = json.decode(response.body);
         throw Exception(
@@ -177,15 +206,30 @@ class TaskService {
 
       final body = {'stage': newStageId};
 
-      final response = await http.patch(
-        url,
-        headers: headers,
-        body: json.encode(body),
-      );
+      http.Response response;
+      try {
+        response = await http.patch(
+          url,
+          headers: headers,
+          body: json.encode(body),
+        );
+      } catch (e) {
+        // Сетевая ошибка: проверим, не обновилась ли задача на сервере
+        final maybe = await getTaskById(taskId);
+        if (maybe != null && maybe.stage == newStageId) {
+          return maybe;
+        }
+        rethrow;
+      }
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return Task.fromJson(data);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isNotEmpty) {
+          final data = json.decode(response.body);
+          return Task.fromJson(data);
+        }
+        final maybe = await getTaskById(taskId);
+        if (maybe != null) return maybe;
+        throw Exception('Пустой ответ сервера');
       } else {
         final errorData = json.decode(response.body);
         throw Exception(

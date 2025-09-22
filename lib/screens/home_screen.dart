@@ -115,13 +115,24 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       } catch (e) {
+        await _refreshData();
+        final updated = _tasks.any((t) => t.id == task.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка обновления задачи: $e'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
+          if (updated) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Задача обновлена'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Ошибка обновления задачи: $e'),
+                backgroundColor: AppColors.danger,
+              ),
+            );
+          }
         }
       }
     }
@@ -155,14 +166,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _moveTaskToStage(Task task, Stage newStage) async {
+    final previousStageId = task.stage;
     try {
       await _taskService.moveTaskToStage(task.id, newStage.id);
       await _refreshData();
     } catch (e) {
-      if (mounted) {
+      // Если запрос упал (например, CORS/сетевая ошибка), проверим факт перемещения
+      await _refreshData();
+      final moved = _tasks.any(
+        (t) => t.id == task.id && t.stage == newStage.id,
+      );
+      if (!moved && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка перемещения задачи: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      } else if (moved && mounted && previousStageId != newStage.id) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Задача перемещена'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _reorderTaskInStage(
+    int stageId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final stageTasks = _getTasksForStage(stageId);
+    if (oldIndex >= stageTasks.length || newIndex >= stageTasks.length) return;
+
+    final task = stageTasks[oldIndex];
+    final newOrder = newIndex;
+
+    try {
+      await _taskService.updateTaskOrder(task.id, newOrder);
+      await _refreshData();
+    } catch (e) {
+      // В случае ошибки обновляем данные и показываем уведомление
+      await _refreshData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка изменения порядка: $e'),
             backgroundColor: AppColors.danger,
           ),
         );
@@ -302,11 +354,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: StageColumn(
               stage: stage,
               tasks: stageTasks,
+              allStages: _stages,
               onTaskMoved: _moveTaskToStage,
               onTaskTap: (task) => _editTask(task),
               onTaskEdit: _editTask,
               onTaskDelete: _deleteTask,
-              onAddTask: () => _createTaskForStage(stage),
+              onTaskReordered: _reorderTaskInStage,
             ),
           );
         }).toList(),
@@ -315,25 +368,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTabletKanban() {
+    final basePadding = ResponsiveUtils.getContentPadding(context);
+    final contentPadding = basePadding.copyWith(
+      right: basePadding.right + 16.0,
+    );
+    final screenWidth = MediaQuery.of(context).size.width;
+    const int cols = 2;
+    final available = screenWidth - contentPadding.left - contentPadding.right;
+    final double columnWidth =
+        (available - (cols * 16.0)) / cols; // 16px суммарные отступы на колонку
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Padding(
-        padding: ResponsiveUtils.getContentPadding(context),
+        padding: contentPadding,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: _stages.map((stage) {
             final stageTasks = _getTasksForStage(stage.id);
             return Container(
-              width: ResponsiveUtils.getKanbanColumnWidth(context),
+              width: columnWidth,
               margin: const EdgeInsets.symmetric(horizontal: 8.0),
               child: StageColumn(
                 stage: stage,
                 tasks: stageTasks,
+                allStages: _stages,
                 onTaskMoved: _moveTaskToStage,
                 onTaskTap: (task) => _editTask(task),
                 onTaskEdit: _editTask,
                 onTaskDelete: _deleteTask,
-                onAddTask: () => _createTaskForStage(stage),
+                onTaskReordered: _reorderTaskInStage,
               ),
             );
           }).toList(),
@@ -343,25 +407,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDesktopKanban() {
+    final basePadding = ResponsiveUtils.getContentPadding(context);
+    final contentPadding = basePadding.copyWith(
+      right: basePadding.right + 16.0,
+    );
+    final screenType = ResponsiveUtils.getScreenTypeFromContext(context);
+    final int cols = screenType == ScreenType.largeDesktop ? 4 : 3;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final available = screenWidth - contentPadding.left - contentPadding.right;
+    final double columnWidth =
+        (available - (cols * 16.0)) / cols; // 16px суммарные отступы на колонку
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Padding(
-        padding: ResponsiveUtils.getContentPadding(context),
+        padding: contentPadding,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: _stages.map((stage) {
             final stageTasks = _getTasksForStage(stage.id);
             return Container(
-              width: ResponsiveUtils.getKanbanColumnWidth(context),
+              width: columnWidth,
               margin: const EdgeInsets.symmetric(horizontal: 8.0),
               child: StageColumn(
                 stage: stage,
                 tasks: stageTasks,
+                allStages: _stages,
                 onTaskMoved: _moveTaskToStage,
                 onTaskTap: (task) => _editTask(task),
                 onTaskEdit: _editTask,
                 onTaskDelete: _deleteTask,
-                onAddTask: () => _createTaskForStage(stage),
+                onTaskReordered: _reorderTaskInStage,
               ),
             );
           }).toList(),
@@ -406,37 +482,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _createTaskForStage(Stage stage) async {
-    final result = await _showCreateTaskDialog(initialStage: stage);
-    if (result != null) {
-      try {
-        await _taskService.createTask(
-          name: result['name'] as String,
-          description: result['description'] as String?,
-          stage: stage.id,
-        );
-        await _refreshData();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Задача создана успешно'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка создания задачи: $e'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        }
-      }
-    }
   }
 
   Future<Map<String, dynamic>?> _showCreateTaskDialog({
