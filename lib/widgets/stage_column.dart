@@ -259,9 +259,12 @@ class StageColumn extends StatelessWidget {
             data: task,
             feedback: Material(
               color: Colors.transparent,
-              child: Transform.scale(
-                scale: 1.05,
-                child: Opacity(opacity: 0.9, child: TaskCard(task: task)),
+              child: SizedBox(
+                width: 280,
+                child: Transform.scale(
+                  scale: 1.05,
+                  child: Opacity(opacity: 0.9, child: TaskCard(task: task)),
+                ),
               ),
             ),
             childWhenDragging: Opacity(
