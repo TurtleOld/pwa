@@ -167,27 +167,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _moveTaskToStage(Task task, Stage newStage) async {
     final previousStageId = task.stage;
+    
+    // Optimistic update: сначала обновляем UI мгновенно
+    final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    if (taskIndex != -1) {
+      final updatedTask = task.copyWith(stage: newStage.id);
+      
+      setState(() {
+        _tasks[taskIndex] = updatedTask;
+      });
+    }
+    
+    // Затем синхронизируем с сервером в фоне
     try {
       await _taskService.moveTaskToStage(task.id, newStage.id);
-      await _refreshData();
-    } catch (e) {
-      // Если запрос упал (например, CORS/сетевая ошибка), проверим факт перемещения
-      await _refreshData();
-      final moved = _tasks.any(
-        (t) => t.id == task.id && t.stage == newStage.id,
-      );
-      if (!moved && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка перемещения задачи: $e'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      } else if (moved && mounted && previousStageId != newStage.id) {
+      // Успешно - показываем уведомление
+      if (mounted && previousStageId != newStage.id) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Задача перемещена'),
             backgroundColor: AppColors.success,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Откат изменений при ошибке
+      if (taskIndex != -1) {
+        final revertedTask = task.copyWith(stage: previousStageId);
+        
+        setState(() {
+          _tasks[taskIndex] = revertedTask;
+        });
+      }
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка перемещения задачи: $e'),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -203,19 +222,38 @@ class _HomeScreenState extends State<HomeScreen> {
     if (oldIndex >= stageTasks.length || newIndex >= stageTasks.length) return;
 
     final task = stageTasks[oldIndex];
-    final newOrder = newIndex;
+    final originalOrder = task.order;
+    
+    // Optimistic update: мгновенно обновляем порядок задач в UI
+    final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    if (taskIndex != -1) {
+      final updatedTask = task.copyWith(order: newIndex);
+      
+      setState(() {
+        _tasks[taskIndex] = updatedTask;
+      });
+    }
 
+    // Синхронизируем с сервером в фоне
     try {
-      await _taskService.updateTaskOrder(task.id, newOrder);
-      await _refreshData();
+      await _taskService.updateTaskOrder(task.id, newIndex);
+      // Успешно - тихо завершаем (без уведомления для reorder)
     } catch (e) {
-      // В случае ошибки обновляем данные и показываем уведомление
-      await _refreshData();
+      // Откат изменений при ошибке
+      if (taskIndex != -1) {
+        final revertedTask = task.copyWith(order: originalOrder);
+        
+        setState(() {
+          _tasks[taskIndex] = revertedTask;
+        });
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка изменения порядка: $e'),
             backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
