@@ -2,27 +2,14 @@ import 'package:flutter/material.dart';
 import '../models/task.dart';
 import '../utils/responsive.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 
 class TaskCard extends StatelessWidget {
   final Task task;
   final VoidCallback? onTap;
-  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
-  final VoidCallback? onMove;
-  final Widget? dragHandle; // shown on desktop to initiate reordering
-  final Widget?
-  crossColumnHandle; // shown on desktop to initiate cross-column drag
 
-  const TaskCard({
-    super.key,
-    required this.task,
-    this.onTap,
-    this.onEdit,
-    this.onDelete,
-    this.onMove,
-    this.dragHandle,
-    this.crossColumnHandle,
-  });
+  const TaskCard({super.key, required this.task, this.onTap, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -34,31 +21,39 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _buildMobileCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8.0),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: task.isOverdue ? AppColors.danger : Colors.transparent,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.only(bottom: 12.0),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: task.isOverdue
+              ? AppColors.danger.withOpacity(0.3)
+              : Colors.transparent,
           width: 2,
         ),
+        boxShadow: ModernShadows.card,
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTaskHeader(context, isMobile: true),
-              const SizedBox(height: 8),
-              if (task.description.isNotEmpty) _buildDescription(context),
-              const SizedBox(height: 8),
-              _buildMobileMetadata(context),
-              if (task.labels.isNotEmpty) _buildLabels(context),
-            ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTaskHeader(context, isMobile: true),
+                const SizedBox(height: 12),
+                if (task.description.isNotEmpty) _buildDescription(context),
+                const SizedBox(height: 12),
+                _buildMobileMetadata(context),
+                if (task.labels.isNotEmpty) _buildLabels(context),
+              ],
+            ),
           ),
         ),
       ),
@@ -66,31 +61,39 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _buildTabletCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8.0),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: task.isOverdue ? AppColors.danger : Colors.transparent,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.only(bottom: 12.0),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: task.isOverdue
+              ? AppColors.danger.withOpacity(0.3)
+              : Colors.transparent,
           width: 2,
         ),
+        boxShadow: ModernShadows.card,
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTaskHeader(context),
-              const SizedBox(height: 8),
-              if (task.description.isNotEmpty) _buildDescription(context),
-              const SizedBox(height: 8),
-              _buildMetadata(context),
-              if (task.labels.isNotEmpty) _buildLabels(context),
-            ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTaskHeader(context),
+                const SizedBox(height: 12),
+                if (task.description.isNotEmpty) _buildDescription(context),
+                const SizedBox(height: 12),
+                _buildMetadata(context),
+                if (task.labels.isNotEmpty) _buildLabels(context),
+              ],
+            ),
           ),
         ),
       ),
@@ -98,31 +101,39 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _buildDesktopCard(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8.0),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: task.isOverdue ? AppColors.danger : Colors.transparent,
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      margin: const EdgeInsets.only(bottom: 12.0),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: task.isOverdue
+              ? AppColors.danger.withOpacity(0.3)
+              : Colors.transparent,
           width: 2,
         ),
+        boxShadow: ModernShadows.card,
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTaskHeader(context),
-              const SizedBox(height: 8),
-              if (task.description.isNotEmpty) _buildDescription(context),
-              const SizedBox(height: 8),
-              _buildMetadata(context),
-              if (task.labels.isNotEmpty) _buildLabels(context),
-            ],
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTaskHeader(context),
+                const SizedBox(height: 12),
+                if (task.description.isNotEmpty) _buildDescription(context),
+                const SizedBox(height: 12),
+                _buildMetadata(context),
+                if (task.labels.isNotEmpty) _buildLabels(context),
+              ],
+            ),
           ),
         ),
       ),
@@ -157,8 +168,6 @@ class TaskCard extends StatelessWidget {
               size: ResponsiveUtils.getResponsiveFontSize(context, 20),
             ),
           ),
-        if (crossColumnHandle != null) crossColumnHandle!,
-        if (dragHandle != null) dragHandle!,
       ],
     );
   }
@@ -227,158 +236,38 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _buildActions(BuildContext context) {
-    return PopupMenuButton<String>(
-      onSelected: (value) {
-        switch (value) {
-          case 'edit':
-            onEdit?.call();
-            break;
-          case 'move':
-            onMove?.call();
-            break;
-          case 'delete':
-            onDelete?.call();
-            break;
-        }
-      },
-      itemBuilder: (context) {
-        final items = <PopupMenuEntry<String>>[];
-        items.add(
-          PopupMenuItem(
-            value: 'edit',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.edit,
-                  size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Редактировать',
-                  style: TextStyle(
-                    fontSize: ResponsiveUtils.getResponsiveFontSize(
-                      context,
-                      14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-        // Show 'move' only on mobile; desktop/tablet use drag-and-drop
-        if (ResponsiveUtils.isMobile(context)) {
-          items.add(
-            PopupMenuItem(
-              value: 'move',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.swap_horiz,
-                    size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Переместить',
-                    style: TextStyle(
-                      fontSize: ResponsiveUtils.getResponsiveFontSize(
-                        context,
-                        14,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        items.add(
-          PopupMenuItem(
-            value: 'delete',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.delete,
-                  size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-                  color: AppColors.danger,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Удалить',
-                  style: TextStyle(
-                    color: AppColors.danger,
-                    fontSize: ResponsiveUtils.getResponsiveFontSize(
-                      context,
-                      14,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-        return items;
-      },
-      child: Icon(
-        Icons.more_vert,
-        size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-        color: AppColors.textSecondary,
+    return IconButton(
+      onPressed: onDelete,
+      icon: Icon(
+        Icons.delete_outline,
+        size: ResponsiveUtils.getResponsiveFontSize(context, 20),
+        color: AppColors.danger,
+      ),
+      style: IconButton.styleFrom(
+        backgroundColor: AppColors.danger.withOpacity(0.1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.all(8),
       ),
     );
   }
 
   Widget _buildMobileActions(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        Expanded(
-          child: TextButton.icon(
-            onPressed: onEdit,
-            icon: Icon(
-              Icons.edit,
-              size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-            ),
-            label: Text(
-              'Редактировать',
-              style: TextStyle(
-                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
-              ),
-            ),
-          ),
+    return Center(
+      child: IconButton(
+        onPressed: onDelete,
+        icon: Icon(
+          Icons.delete_outline,
+          size: ResponsiveUtils.getResponsiveFontSize(context, 24),
+          color: AppColors.danger,
         ),
-        Expanded(
-          child: TextButton.icon(
-            onPressed: onMove,
-            icon: Icon(
-              Icons.swap_horiz,
-              size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-            ),
-            label: Text(
-              'Переместить',
-              style: TextStyle(
-                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
-              ),
-            ),
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.danger.withOpacity(0.1),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
+          padding: const EdgeInsets.all(12),
         ),
-        Expanded(
-          child: TextButton.icon(
-            onPressed: onDelete,
-            icon: Icon(
-              Icons.delete,
-              size: ResponsiveUtils.getResponsiveFontSize(context, 16),
-              color: AppColors.danger,
-            ),
-            label: Text(
-              'Удалить',
-              style: TextStyle(
-                color: AppColors.danger,
-                fontSize: ResponsiveUtils.getResponsiveFontSize(context, 12),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 

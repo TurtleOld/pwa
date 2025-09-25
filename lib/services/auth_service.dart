@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import '../models/user.dart';
 import 'settings_service.dart';
 
@@ -11,30 +11,33 @@ class AuthService {
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final SettingsService _settingsService = SettingsService();
+  late final Dio _dio;
+
+  AuthService() {
+    _dio = Dio();
+    _dio.options.connectTimeout = const Duration(seconds: 10);
+    _dio.options.receiveTimeout = const Duration(seconds: 10);
+    _dio.options.sendTimeout = const Duration(seconds: 10);
+  }
 
   Future<User?> login(String username, String password) async {
     try {
       final apiBaseUrl = await _settingsService.getApiBaseUrl();
-      final loginUrl = Uri.parse('${apiBaseUrl}auth/login/');
+      final loginUrl = '${apiBaseUrl}auth/login/';
 
-      print('🔗 API Base URL: $apiBaseUrl');
-      print('🔗 Login URL: $loginUrl');
-      print('🔗 Username: $username');
-
-      final response = await http.post(
+      final response = await _dio.post(
         loginUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: json.encode({'username': username.trim(), 'password': password}),
+        data: {'username': username.trim(), 'password': password},
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
       );
 
-      print('📡 Response status: ${response.statusCode}');
-      print('📡 Response body: ${response.body}');
-
       if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
+        final responseData = response.data;
 
         // Извлекаем токен и expiry из ответа Knox
         final token = responseData['token'] as String?;
@@ -43,9 +46,6 @@ class AuthService {
         if (token == null) {
           throw Exception('Токен не получен от сервера');
         }
-
-        print('🔑 Token: ${token.substring(0, 10)}...');
-        print('⏰ Expiry: $expiry');
 
         // Создаем пользователя с базовой информацией из ответа логина
         final userData = responseData['user'] as Map<String, dynamic>?;
@@ -66,11 +66,38 @@ class AuthService {
           return user;
         }
       } else {
-        final errorData = json.decode(response.body);
+        final errorData = response.data;
         final errorMessage = _parseErrorMessage(errorData);
         throw Exception(errorMessage);
       }
     } catch (e) {
+      if (e is DioException) {
+        if (e.type == DioExceptionType.connectionTimeout) {
+          throw Exception('Превышено время ожидания подключения к серверу');
+        } else if (e.type == DioExceptionType.receiveTimeout) {
+          throw Exception('Превышено время ожидания ответа от сервера');
+        } else if (e.type == DioExceptionType.sendTimeout) {
+          throw Exception('Превышено время отправки запроса на сервер');
+        } else if (e.type == DioExceptionType.connectionError) {
+          throw Exception(
+            'Ошибка подключения к серверу. Проверьте адрес сервера и интернет-соединение',
+          );
+        } else if (e.response != null) {
+          final statusCode = e.response!.statusCode;
+          if (statusCode == 401) {
+            throw Exception('Неверные учетные данные');
+          } else if (statusCode == 403) {
+            throw Exception('Доступ запрещен');
+          } else if (statusCode == 404) {
+            throw Exception('Сервер не найден. Проверьте адрес сервера');
+          } else if (statusCode == 500) {
+            throw Exception('Внутренняя ошибка сервера');
+          } else {
+            throw Exception('Ошибка сервера: $statusCode');
+          }
+        }
+      }
+
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
@@ -86,15 +113,17 @@ class AuthService {
 
       if (token != null && token.isNotEmpty) {
         final apiBaseUrl = await _settingsService.getApiBaseUrl();
-        final logoutUrl = Uri.parse('${apiBaseUrl}auth/logout/');
+        final logoutUrl = '${apiBaseUrl}auth/logout/';
 
-        await http.post(
+        await _dio.post(
           logoutUrl,
-          headers: {
-            'Authorization': 'Token $token',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
+          options: Options(
+            headers: {
+              'Authorization': 'Token $token',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          ),
         );
       }
 
@@ -137,7 +166,6 @@ class AuthService {
         final expiryDate = DateTime.parse(expiry);
         final now = DateTime.now();
         if (now.isAfter(expiryDate)) {
-          print('⏰ Token expired, clearing auth data');
           await _storage.delete(key: _tokenKey);
           await _storage.delete(key: _userKey);
           await _storage.delete(key: _expiryKey);
@@ -147,7 +175,6 @@ class AuthService {
 
       return true;
     } catch (e) {
-      print('🔧 Error checking authentication: $e');
       return false;
     }
   }
@@ -158,7 +185,6 @@ class AuthService {
       await _storage.write(key: _userKey, value: json.encode(user.toJson()));
       if (expiry != null) {
         await _storage.write(key: _expiryKey, value: expiry);
-        print('💾 Saved expiry: $expiry');
       }
     } catch (e) {
       throw Exception('Ошибка сохранения данных: $e');

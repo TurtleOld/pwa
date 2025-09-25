@@ -5,7 +5,9 @@ import '../services/task_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/stage_column.dart';
 import '../widgets/responsive_navigation.dart';
+import '../widgets/modern_dialog.dart';
 import '../utils/responsive.dart';
+import '../utils/animations.dart';
 import '../theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -52,8 +54,34 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      String errorMessage = e.toString();
+
+      // Улучшенная обработка ошибок
+      if (e.toString().contains('DioException')) {
+        if (e.toString().contains('connectionError')) {
+          errorMessage =
+              'Ошибка подключения к серверу. Проверьте адрес сервера и интернет-соединение.';
+        } else if (e.toString().contains('connectionTimeout')) {
+          errorMessage = 'Превышено время ожидания подключения к серверу.';
+        } else if (e.toString().contains('receiveTimeout')) {
+          errorMessage = 'Превышено время ожидания ответа от сервера.';
+        } else if (e.toString().contains('sendTimeout')) {
+          errorMessage = 'Превышено время отправки запроса на сервер.';
+        } else if (e.toString().contains('401')) {
+          errorMessage = 'Сессия истекла. Пожалуйста, войдите заново.';
+        } else if (e.toString().contains('403')) {
+          errorMessage = 'Доступ запрещен. Проверьте права доступа.';
+        } else if (e.toString().contains('404')) {
+          errorMessage = 'Сервер не найден. Проверьте адрес сервера.';
+        } else if (e.toString().contains('500')) {
+          errorMessage = 'Внутренняя ошибка сервера. Попробуйте позже.';
+        }
+      } else if (e.toString().contains('Пользователь не аутентифицирован')) {
+        errorMessage = 'Сессия истекла. Пожалуйста, войдите заново.';
+      }
+
       setState(() {
-        _error = e.toString();
+        _error = errorMessage;
         _isLoading = false;
       });
     }
@@ -167,27 +195,100 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _moveTaskToStage(Task task, Stage newStage) async {
     final previousStageId = task.stage;
+
+    // Optimistic update: сначала обновляем UI мгновенно
+    final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    if (taskIndex != -1) {
+      final updatedTask = task.copyWith(stage: newStage.id);
+
+      setState(() {
+        _tasks[taskIndex] = updatedTask;
+      });
+    }
+
+    // Затем синхронизируем с сервером в фоне
     try {
       await _taskService.moveTaskToStage(task.id, newStage.id);
-      await _refreshData();
-    } catch (e) {
-      // Если запрос упал (например, CORS/сетевая ошибка), проверим факт перемещения
-      await _refreshData();
-      final moved = _tasks.any(
-        (t) => t.id == task.id && t.stage == newStage.id,
-      );
-      if (!moved && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка перемещения задачи: $e'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      } else if (moved && mounted && previousStageId != newStage.id) {
+      // Успешно - показываем уведомление
+      if (mounted && previousStageId != newStage.id) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Задача перемещена'),
             backgroundColor: AppColors.success,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // Проверяем, не была ли задача все-таки перемещена на сервере
+      final errorStr = e.toString();
+      bool taskMayBeMoved =
+          errorStr.contains('Ошибка парсинга ответа сервера') ||
+          errorStr.contains('Пустой ответ сервера') ||
+          errorStr.contains('Failed to fetch') ||
+          errorStr.contains('ClientException');
+
+      if (taskMayBeMoved) {
+        // Если возможна проблема с парсингом или сетью, попробуем обновить данные
+        try {
+          await _refreshData();
+
+          // Проверяем, действительно ли задача была перемещена
+          final updatedTask = _tasks.firstWhere(
+            (t) => t.id == task.id,
+            orElse: () => task,
+          );
+
+          if (updatedTask.stage == newStage.id) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Задача перемещена успешно'),
+                  backgroundColor: AppColors.success,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+            return; // Выходим, не откатывая изменения
+          } else {}
+        } catch (refreshError) {
+          // Если обновление не удалось, продолжаем с откатом
+        }
+      }
+
+      // Откат изменений при ошибке
+      if (taskIndex != -1) {
+        final revertedTask = task.copyWith(stage: previousStageId);
+
+        setState(() {
+          _tasks[taskIndex] = revertedTask;
+        });
+      }
+
+      if (mounted) {
+        // Улучшенное сообщение об ошибке
+        String errorMessage = 'Ошибка перемещения задачи';
+
+        if (errorStr.contains('Нет подключения к серверу')) {
+          errorMessage =
+              'Нет подключения к серверу. Проверьте интернет-соединение.';
+        } else if (errorStr.contains('Сервер недоступен')) {
+          errorMessage = 'Сервер недоступен. Попробуйте позже.';
+        } else if (errorStr.contains('Ошибка парсинга ответа сервера')) {
+          errorMessage =
+              'Ошибка обработки ответа сервера. Задача может быть перемещена.';
+        } else if (errorStr.contains('Пустой ответ сервера')) {
+          errorMessage =
+              'Сервер вернул пустой ответ. Задача может быть перемещена.';
+        } else {
+          errorMessage = 'Ошибка перемещения задачи: $e';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -203,19 +304,38 @@ class _HomeScreenState extends State<HomeScreen> {
     if (oldIndex >= stageTasks.length || newIndex >= stageTasks.length) return;
 
     final task = stageTasks[oldIndex];
-    final newOrder = newIndex;
+    final originalOrder = task.order;
 
+    // Optimistic update: мгновенно обновляем порядок задач в UI
+    final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+    if (taskIndex != -1) {
+      final updatedTask = task.copyWith(order: newIndex);
+
+      setState(() {
+        _tasks[taskIndex] = updatedTask;
+      });
+    }
+
+    // Синхронизируем с сервером в фоне
     try {
-      await _taskService.updateTaskOrder(task.id, newOrder);
-      await _refreshData();
+      await _taskService.updateTaskOrder(task.id, newIndex);
+      // Успешно - тихо завершаем (без уведомления для reorder)
     } catch (e) {
-      // В случае ошибки обновляем данные и показываем уведомление
-      await _refreshData();
+      // Откат изменений при ошибке
+      if (taskIndex != -1) {
+        final revertedTask = task.copyWith(order: originalOrder);
+
+        setState(() {
+          _tasks[taskIndex] = revertedTask;
+        });
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка изменения порядка: $e'),
             backgroundColor: AppColors.danger,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -254,7 +374,26 @@ class _HomeScreenState extends State<HomeScreen> {
           onSettings: () => Navigator.of(context).pushNamed('/settings'),
           onLogout: _handleLogout,
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(
+          child: ModernAnimations.fadeScaleIn(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const ModernLoadingIndicator(
+                  size: 48,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Загрузка задач...',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -267,33 +406,55 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: Center(
           child: ResponsiveContainer(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: AppColors.danger,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Ошибка загрузки данных',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+            child: ModernAnimations.fadeScaleIn(
+              duration: ModernAnimations.slow,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ModernAnimations.shake(
+                    child: const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: AppColors.danger,
+                    ),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _refreshData,
-                  child: const Text('Повторить'),
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  Text(
+                    'Ошибка загрузки данных',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ModernAnimations.fadeIn(
+                        duration: ModernAnimations.slow,
+                        child: ElevatedButton(
+                          onPressed: _refreshData,
+                          child: const Text('Повторить'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      ModernAnimations.fadeIn(
+                        duration: ModernAnimations.slow,
+                        child: OutlinedButton(
+                          onPressed: () =>
+                              Navigator.of(context).pushNamed('/settings'),
+                          child: const Text('Настройки'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -311,9 +472,10 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppColors.bgSecondary, AppColors.bgTertiary],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: AppColors.backgroundGradient,
+            stops: [0.0, 1.0],
           ),
         ),
         child: SafeArea(
@@ -357,7 +519,6 @@ class _HomeScreenState extends State<HomeScreen> {
               allStages: _stages,
               onTaskMoved: _moveTaskToStage,
               onTaskTap: (task) => _editTask(task),
-              onTaskEdit: _editTask,
               onTaskDelete: _deleteTask,
               onTaskReordered: _reorderTaskInStage,
             ),
@@ -395,7 +556,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 allStages: _stages,
                 onTaskMoved: _moveTaskToStage,
                 onTaskTap: (task) => _editTask(task),
-                onTaskEdit: _editTask,
                 onTaskDelete: _deleteTask,
                 onTaskReordered: _reorderTaskInStage,
               ),
@@ -435,7 +595,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 allStages: _stages,
                 onTaskMoved: _moveTaskToStage,
                 onTaskTap: (task) => _editTask(task),
-                onTaskEdit: _editTask,
                 onTaskDelete: _deleteTask,
                 onTaskReordered: _reorderTaskInStage,
               ),
@@ -449,36 +608,44 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildEmptyState() {
     return Center(
       child: ResponsiveContainer(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.dashboard_outlined,
-              size: 64,
-              color: AppColors.gray600,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Kanban Доска',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Создайте первую задачу, чтобы начать работу',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _createTask,
-              icon: const Icon(Icons.add),
-              label: const Text('Создать задачу'),
-            ),
-          ],
+        child: ModernAnimations.fadeScaleIn(
+          duration: ModernAnimations.slow,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ModernAnimations.pulse(
+                child: const Icon(
+                  Icons.dashboard_outlined,
+                  size: 64,
+                  color: AppColors.gray600,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Kanban Доска',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Создайте первую задачу, чтобы начать работу',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ModernAnimations.fadeIn(
+                duration: ModernAnimations.verySlow,
+                child: ElevatedButton.icon(
+                  onPressed: _createTask,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Создать задачу'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -491,72 +658,70 @@ class _HomeScreenState extends State<HomeScreen> {
     final descriptionController = TextEditingController();
     Stage? selectedStage = initialStage ?? _stages.first;
 
-    return showDialog<Map<String, dynamic>>(
+    return ModernDialogUtils.showModernDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Создать задачу'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Название задачи',
-                  border: OutlineInputBorder(),
-                ),
-                autofocus: true,
+      title: 'Создать задачу',
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Название задачи',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Описание (необязательно)',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
+              autofocus: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Описание (необязательно)',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<Stage>(
-                value: selectedStage,
-                decoration: const InputDecoration(
-                  labelText: 'Этап',
-                  border: OutlineInputBorder(),
-                ),
-                items: _stages.map((stage) {
-                  return DropdownMenuItem(
-                    value: stage,
-                    child: Text(stage.displayName),
-                  );
-                }).toList(),
-                onChanged: (stage) {
-                  selectedStage = stage;
-                },
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<Stage>(
+              initialValue: selectedStage,
+              decoration: const InputDecoration(
+                labelText: 'Этап',
+                border: OutlineInputBorder(),
               ),
-            ],
-          ),
+              items: _stages.map((stage) {
+                return DropdownMenuItem(
+                  value: stage,
+                  child: Text(stage.displayName),
+                );
+              }).toList(),
+              onChanged: (stage) {
+                selectedStage = stage;
+              },
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.trim().isNotEmpty) {
-                Navigator.of(context).pop({
-                  'name': nameController.text.trim(),
-                  'description': descriptionController.text.trim().isEmpty
-                      ? null
-                      : descriptionController.text.trim(),
-                  'stage': selectedStage?.id,
-                });
-              }
-            },
-            child: const Text('Создать'),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (nameController.text.trim().isNotEmpty) {
+              Navigator.of(context).pop({
+                'name': nameController.text.trim(),
+                'description': descriptionController.text.trim().isEmpty
+                    ? null
+                    : descriptionController.text.trim(),
+                'stage': selectedStage?.id,
+              });
+            }
+          },
+          child: const Text('Создать'),
+        ),
+      ],
     );
   }
 
@@ -568,101 +733,89 @@ class _HomeScreenState extends State<HomeScreen> {
       orElse: () => _stages.first,
     );
 
-    return showDialog<Map<String, dynamic>>(
+    return ModernDialogUtils.showModernDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Редактировать задачу'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Название задачи',
-                  border: OutlineInputBorder(),
-                ),
+      title: 'Редактировать задачу',
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Название задачи',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Описание',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: descriptionController,
+              decoration: const InputDecoration(
+                labelText: 'Описание',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<Stage>(
-                value: selectedStage,
-                decoration: const InputDecoration(
-                  labelText: 'Этап',
-                  border: OutlineInputBorder(),
-                ),
-                items: _stages.map((stage) {
-                  return DropdownMenuItem(
-                    value: stage,
-                    child: Text(stage.displayName),
-                  );
-                }).toList(),
-                onChanged: (stage) {
-                  selectedStage = stage;
-                },
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<Stage>(
+              initialValue: selectedStage,
+              decoration: const InputDecoration(
+                labelText: 'Этап',
+                border: OutlineInputBorder(),
               ),
-              const SizedBox(height: 16),
-              CheckboxListTile(
-                title: const Text('Задача выполнена'),
-                value: task.state,
-                onChanged: (value) {
-                  // Обновляем состояние в диалоге
-                },
-              ),
-            ],
-          ),
+              items: _stages.map((stage) {
+                return DropdownMenuItem(
+                  value: stage,
+                  child: Text(stage.displayName),
+                );
+              }).toList(),
+              onChanged: (stage) {
+                selectedStage = stage;
+              },
+            ),
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              title: const Text('Задача выполнена'),
+              value: task.state,
+              onChanged: (value) {
+                // Обновляем состояние в диалоге
+              },
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.trim().isNotEmpty) {
-                Navigator.of(context).pop({
-                  'name': nameController.text.trim(),
-                  'description': descriptionController.text.trim().isEmpty
-                      ? null
-                      : descriptionController.text.trim(),
-                  'stage': selectedStage?.id,
-                  'state': task.state,
-                });
-              }
-            },
-            child: const Text('Сохранить'),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Отмена'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (nameController.text.trim().isNotEmpty) {
+              Navigator.of(context).pop({
+                'name': nameController.text.trim(),
+                'description': descriptionController.text.trim().isEmpty
+                    ? null
+                    : descriptionController.text.trim(),
+                'stage': selectedStage?.id,
+                'state': task.state,
+              });
+            }
+          },
+          child: const Text('Сохранить'),
+        ),
+      ],
     );
   }
 
   Future<bool?> _showDeleteConfirmation(Task task) async {
-    return showDialog<bool>(
+    return ModernDialogUtils.showModernConfirmationDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить задачу'),
-        content: Text('Вы уверены, что хотите удалить задачу "${task.name}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
+      title: 'Удалить задачу',
+      message: 'Вы уверены, что хотите удалить задачу "${task.name}"?',
+      confirmText: 'Удалить',
+      cancelText: 'Отмена',
+      confirmColor: AppColors.danger,
     );
   }
 }

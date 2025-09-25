@@ -14,7 +14,7 @@
 ## Технологический стек
 
 - Flutter 3.9.2+
-- HTTP-клиент [`http`](https://pub.dev/packages/http)
+- HTTP-клиент [`dio`](https://pub.dev/packages/dio) - все запросы используют POST метод
 - Безопасное хранилище [`flutter_secure_storage`](https://pub.dev/packages/flutter_secure_storage)
 
 ## Структура каталогов
@@ -30,7 +30,8 @@ lib/
 │   └── settings_screen.dart   # Настройка адреса сервера и валидация URL
 ├── services/
 │   ├── auth_service.dart      # Вход, выход, хранение токена и проверки
-│   └── settings_service.dart  # Работа с безопасным хранилищем и базовым URL API
+│   ├── settings_service.dart  # Работа с безопасным хранилищем и базовым URL API
+│   └── task_service.dart      # Работа с задачами через API (CRUD операции)
 └── theme/
     ├── app_colors.dart        # Набор корпоративных цветов для светлой/тёмной темы
     └── app_theme.dart         # Конфигурация Material 3 тем и глобальных стилей
