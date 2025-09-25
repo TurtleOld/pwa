@@ -15,13 +15,14 @@ class AppTheme {
         foregroundColor: AppColors.white,
         elevation: 0,
         centerTitle: true,
+        shadowColor: AppColors.shadowLight,
       ),
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         color: AppColors.white,
-        elevation: 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-        ),
+        elevation: 0,
+        shadowColor: AppColors.shadowLight,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        margin: const EdgeInsets.all(4),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -55,11 +56,12 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.white,
-          elevation: 1,
+          elevation: 0,
+          shadowColor: AppColors.shadowColored,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -119,13 +121,14 @@ class AppTheme {
         foregroundColor: AppColors.darkTextPrimary,
         elevation: 0,
         centerTitle: true,
+        shadowColor: AppColors.shadowDark,
       ),
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         color: AppColors.darkBgSecondary,
-        elevation: 1,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-        ),
+        elevation: 0,
+        shadowColor: AppColors.shadowDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        margin: const EdgeInsets.all(4),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -161,11 +164,12 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.white,
-          elevation: 1,
+          elevation: 0,
+          shadowColor: AppColors.shadowColored,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -208,6 +212,91 @@ class AppTheme {
         bodyLarge: TextStyle(color: AppColors.darkTextPrimary, fontSize: 16),
         bodyMedium: TextStyle(color: AppColors.darkTextPrimary, fontSize: 14),
         bodySmall: TextStyle(color: AppColors.darkTextSecondary, fontSize: 12),
+      ),
+    );
+  }
+}
+
+// Modern shadow utilities
+class ModernShadows {
+  static const List<BoxShadow> card = [
+    BoxShadow(
+      color: AppColors.shadowLight,
+      blurRadius: 20,
+      offset: Offset(0, 8),
+      spreadRadius: 0,
+    ),
+    BoxShadow(
+      color: AppColors.shadowMedium,
+      blurRadius: 6,
+      offset: Offset(0, 2),
+      spreadRadius: 0,
+    ),
+  ];
+
+  static const List<BoxShadow> cardHover = [
+    BoxShadow(
+      color: AppColors.shadowMedium,
+      blurRadius: 25,
+      offset: Offset(0, 12),
+      spreadRadius: 0,
+    ),
+    BoxShadow(
+      color: AppColors.shadowDark,
+      blurRadius: 8,
+      offset: Offset(0, 4),
+      spreadRadius: 0,
+    ),
+  ];
+
+  static const List<BoxShadow> button = [
+    BoxShadow(
+      color: AppColors.shadowColored,
+      blurRadius: 12,
+      offset: Offset(0, 4),
+      spreadRadius: 0,
+    ),
+  ];
+
+  static const List<BoxShadow> buttonHover = [
+    BoxShadow(
+      color: AppColors.shadowColored,
+      blurRadius: 16,
+      offset: Offset(0, 6),
+      spreadRadius: 0,
+    ),
+  ];
+
+  static const List<BoxShadow> floating = [
+    BoxShadow(
+      color: AppColors.shadowDark,
+      blurRadius: 30,
+      offset: Offset(0, 15),
+      spreadRadius: 0,
+    ),
+  ];
+}
+
+// Glass morphism utilities
+class GlassMorphism {
+  static BoxDecoration light({double borderRadius = 16, double opacity = 0.1}) {
+    return BoxDecoration(
+      color: AppColors.glassLight.withOpacity(opacity),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: AppColors.glassBorder.withOpacity(0.2),
+        width: 1,
+      ),
+    );
+  }
+
+  static BoxDecoration dark({double borderRadius = 16, double opacity = 0.1}) {
+    return BoxDecoration(
+      color: AppColors.glassDark.withOpacity(opacity),
+      borderRadius: BorderRadius.circular(borderRadius),
+      border: Border.all(
+        color: AppColors.glassBorder.withOpacity(0.1),
+        width: 1,
       ),
     );
   }

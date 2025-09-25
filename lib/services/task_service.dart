@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../models/task.dart';
 import '../models/stage.dart';
 import 'auth_service.dart';
@@ -8,12 +9,20 @@ import 'settings_service.dart';
 class TaskService {
   final AuthService _authService = AuthService();
   final SettingsService _settingsService = SettingsService();
+  late final Dio _dio;
+
+  TaskService() {
+    _dio = Dio();
+    _dio.options.connectTimeout = const Duration(seconds: 10);
+    _dio.options.receiveTimeout = const Duration(seconds: 10);
+    _dio.options.sendTimeout = const Duration(seconds: 10);
+  }
 
   Future<String> _getApiBaseUrl() async {
     return await _settingsService.getApiBaseUrl();
   }
 
-  Future<Map<String, String>> _getHeaders() async {
+  Future<Map<String, dynamic>> _getHeaders() async {
     final token = await _authService.getTokenInfo();
     return {
       'Content-Type': 'application/json',
@@ -25,15 +34,17 @@ class TaskService {
   Future<Task?> getTaskById(int taskId) async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
+      final url = '${apiBaseUrl}tasks/$taskId';
       final headers = await _getHeaders();
-      final response = await http.get(url, headers: headers);
+
+      final response = await _dio.get(url, options: Options(headers: headers));
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return Task.fromJson(data);
+        final task = Task.fromJson(response.data);
+        return task;
       }
       return null;
-    } catch (_) {
+    } catch (e) {
       return null;
     }
   }
@@ -42,17 +53,18 @@ class TaskService {
   Future<List<Task>> getTasks() async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks');
+      final url = '${apiBaseUrl}tasks';
       final headers = await _getHeaders();
 
-      final response = await http.get(url, headers: headers);
+      final response = await _dio.get(url, options: Options(headers: headers));
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => Task.fromJson(json)).toList();
+        final List<dynamic> data = response.data;
+        final tasks = data.map((json) => Task.fromJson(json)).toList();
+        return tasks;
       } else {
         throw Exception(
-          'Ошибка загрузки задач: ${response.statusCode} - ${response.body}',
+          'Ошибка загрузки задач: ${response.statusCode} - ${response.data}',
         );
       }
     } catch (e) {
@@ -64,14 +76,15 @@ class TaskService {
   Future<List<Stage>> getStages() async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}stages');
+      final url = '${apiBaseUrl}stages';
       final headers = await _getHeaders();
 
-      final response = await http.get(url, headers: headers);
+      final response = await _dio.get(url, options: Options(headers: headers));
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => Stage.fromJson(json)).toList();
+        final List<dynamic> data = response.data;
+        final stages = data.map((json) => Stage.fromJson(json)).toList();
+        return stages;
       } else {
         // Если нет отдельного API для этапов, создаем дефолтные
         return _getDefaultStages();
@@ -93,7 +106,7 @@ class TaskService {
   }) async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks');
+      final url = '${apiBaseUrl}tasks';
       final headers = await _getHeaders();
 
       final body = {
@@ -105,19 +118,17 @@ class TaskService {
         if (deadline != null) 'deadline': deadline.toIso8601String(),
       };
 
-      final response = await http.post(
+      final response = await _dio.post(
         url,
-        headers: headers,
-        body: json.encode(body),
+        data: body,
+        options: Options(headers: headers),
       );
 
       if (response.statusCode == 201) {
-        final data = json.decode(response.body);
-        return Task.fromJson(data);
+        return Task.fromJson(response.data);
       } else {
-        final errorData = json.decode(response.body);
         throw Exception(
-          'Ошибка создания задачи: ${_parseErrorMessage(errorData)}',
+          'Ошибка создания задачи: ${_parseErrorMessage(response.data)}',
         );
       }
     } catch (e) {
@@ -137,7 +148,7 @@ class TaskService {
   }) async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
+      final url = '${apiBaseUrl}tasks/$taskId';
       final headers = await _getHeaders();
 
       final body = <String, dynamic>{};
@@ -149,12 +160,12 @@ class TaskService {
       if (deadline != null) body['deadline'] = deadline.toIso8601String();
       if (state != null) body['state'] = state;
 
-      http.Response response;
+      Response response;
       try {
-        response = await http.patch(
-          url,
-          headers: headers,
-          body: json.encode(body),
+        response = await _dio.post(
+          '$url/update',
+          data: body,
+          options: Options(headers: headers),
         );
       } catch (e) {
         // В случае сетевой ошибки пробуем перечитать задачу
@@ -163,18 +174,27 @@ class TaskService {
         rethrow;
       }
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        if (response.body.isNotEmpty) {
-          final data = json.decode(response.body);
-          return Task.fromJson(data);
+      if (response.statusCode != null &&
+          response.statusCode! >= 200 &&
+          response.statusCode! < 300) {
+        if (response.data != null) {
+          try {
+            return Task.fromJson(response.data);
+          } catch (e) {
+            // Если не удалось распарсить ответ, но статус 200, попробуем получить задачу по ID
+            final fallback = await getTaskById(taskId);
+            if (fallback != null) {
+              return fallback;
+            }
+            throw Exception('Ошибка парсинга ответа сервера: $e');
+          }
         }
         final fallback = await getTaskById(taskId);
         if (fallback != null) return fallback;
         throw Exception('Пустой ответ сервера');
       } else {
-        final errorData = json.decode(response.body);
         throw Exception(
-          'Ошибка обновления задачи: ${_parseErrorMessage(errorData)}',
+          'Ошибка обновления задачи: ${_parseErrorMessage(response.data)}',
         );
       }
     } catch (e) {
@@ -185,10 +205,13 @@ class TaskService {
   Future<void> deleteTask(int taskId) async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
+      final url = '${apiBaseUrl}tasks/$taskId';
       final headers = await _getHeaders();
 
-      final response = await http.delete(url, headers: headers);
+      final response = await _dio.post(
+        '$url/delete',
+        options: Options(headers: headers),
+      );
 
       if (response.statusCode != 204) {
         throw Exception('Ошибка удаления задачи: ${response.statusCode}');
@@ -201,67 +224,79 @@ class TaskService {
   Future<Task> moveTaskToStage(int taskId, int newStageId) async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
+      final url = '${apiBaseUrl}tasks/$taskId';
       final headers = await _getHeaders();
-
-      print('🔄 Moving task $taskId to stage $newStageId');
-      print('🌐 API URL: $url');
-      print('📋 Headers: $headers');
 
       final body = {'stage': newStageId};
 
-      http.Response response;
+      Response response;
       try {
-        response = await http.patch(
-          url,
-          headers: headers,
-          body: json.encode(body),
+        // Используем POST запрос на /update endpoint
+        response = await _dio.post(
+          '$url/update',
+          data: body,
+          options: Options(headers: headers),
         );
-        print('📡 Response status: ${response.statusCode}');
-        print('📡 Response headers: ${response.headers}');
-        print('📡 Response body: ${response.body}');
       } catch (e) {
-        print('❌ Network error during PATCH: $e');
         // Сетевая ошибка: проверим, не обновилась ли задача на сервере
-        final maybe = await getTaskById(taskId);
-        if (maybe != null && maybe.stage == newStageId) {
-          print('✅ Task was updated despite network error');
-          return maybe;
+        try {
+          final maybe = await getTaskById(taskId);
+          if (maybe != null) {
+            if (maybe.stage == newStageId) {
+              return maybe;
+            }
+          }
+        } catch (fallbackError) {
+          // Ignore fallback errors
         }
-        print('❌ Task was not updated, rethrowing error');
         rethrow;
       }
 
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        print('✅ Success response received');
-        if (response.body.isNotEmpty) {
+      if (response.statusCode != null &&
+          response.statusCode! >= 200 &&
+          response.statusCode! < 300) {
+        if (response.data != null) {
           try {
-            final data = json.decode(response.body);
-            print('📦 Parsed response data: $data');
-            final task = Task.fromJson(data);
-            print('✅ Task successfully parsed and returned');
+            final task = Task.fromJson(response.data);
             return task;
           } catch (e) {
-            print('❌ Error parsing response JSON: $e');
+            // Если не удалось распарсить ответ, но статус 200, попробуем получить задачу по ID
+            final fallback = await getTaskById(taskId);
+            if (fallback != null) {
+              return fallback;
+            }
             throw Exception('Ошибка парсинга ответа сервера: $e');
           }
         }
-        print('⚠️ Empty response body, fetching task by ID');
         final maybe = await getTaskById(taskId);
-        if (maybe != null) return maybe;
+        if (maybe != null) {
+          return maybe;
+        }
         throw Exception('Пустой ответ сервера');
       } else {
-        print('❌ Error response: ${response.statusCode}');
         try {
-          final errorData = json.decode(response.body);
           throw Exception(
-            'Ошибка перемещения задачи: ${_parseErrorMessage(errorData)}',
+            'Ошибка перемещения задачи: ${_parseErrorMessage(response.data)}',
           );
         } catch (e) {
-          throw Exception('Ошибка сервера: ${response.statusCode} - ${response.body}');
+          throw Exception(
+            'Ошибка сервера: ${response.statusCode} - ${response.data}',
+          );
         }
       }
     } catch (e) {
+      // Улучшенная обработка ошибок
+      if (e.toString().contains('Ошибка парсинга ответа сервера') ||
+          e.toString().contains('Пустой ответ сервера')) {
+        // Это не сетевая ошибка, а проблема с ответом сервера
+        try {
+          final fallback = await getTaskById(taskId);
+          if (fallback != null && fallback.stage == newStageId) {
+            return fallback;
+          }
+        } catch (fallbackError) {}
+      }
+
       final errorMessage = _getNetworkErrorMessage(e);
       throw Exception('Ошибка перемещения задачи: $errorMessage');
     }
@@ -270,15 +305,15 @@ class TaskService {
   Future<void> updateTaskOrder(int taskId, int newOrder) async {
     try {
       final apiBaseUrl = await _getApiBaseUrl();
-      final url = Uri.parse('${apiBaseUrl}tasks/$taskId');
+      final url = '${apiBaseUrl}tasks/$taskId';
       final headers = await _getHeaders();
 
       final body = {'order': newOrder};
 
-      final response = await http.patch(
-        url,
-        headers: headers,
-        body: json.encode(body),
+      final response = await _dio.post(
+        '$url/update',
+        data: body,
+        options: Options(headers: headers),
       );
 
       if (response.statusCode != 200) {
@@ -366,6 +401,10 @@ class TaskService {
       return 'Нет подключения к серверу. Проверьте интернет-соединение.';
     }
 
+    if (errorStr.contains('clientexception')) {
+      return 'Ошибка сети. Задача может быть перемещена.';
+    }
+
     if (errorStr.contains('connection refused') ||
         errorStr.contains('connection timed out')) {
       return 'Сервер недоступен. Попробуйте позже.';
@@ -377,6 +416,14 @@ class TaskService {
 
     if (errorStr.contains('0.0.0.0')) {
       return 'Неправильный адрес сервера (0.0.0.0 недоступен из браузера)';
+    }
+
+    if (errorStr.contains('ошибка парсинга ответа сервера')) {
+      return 'Ошибка обработки ответа сервера. Задача может быть перемещена.';
+    }
+
+    if (errorStr.contains('пустой ответ сервера')) {
+      return 'Сервер вернул пустой ответ. Задача может быть перемещена.';
     }
 
     return error.toString();

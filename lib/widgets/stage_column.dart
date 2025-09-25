@@ -4,6 +4,7 @@ import '../models/task.dart';
 import 'task_card.dart';
 import '../utils/responsive.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
 
 class StageColumn extends StatelessWidget {
   final Stage stage;
@@ -11,7 +12,6 @@ class StageColumn extends StatelessWidget {
   final List<Stage> allStages;
   final Function(Task, Stage)? onTaskMoved;
   final Function(Task)? onTaskTap;
-  final Function(Task)? onTaskEdit;
   final Function(Task)? onTaskDelete;
   final Function(int, int, int)? onTaskReordered;
   final VoidCallback? onAddTask;
@@ -23,7 +23,6 @@ class StageColumn extends StatelessWidget {
     required this.allStages,
     this.onTaskMoved,
     this.onTaskTap,
-    this.onTaskEdit,
     this.onTaskDelete,
     this.onTaskReordered,
     this.onAddTask,
@@ -83,21 +82,26 @@ class StageColumn extends StatelessWidget {
   Widget _buildColumnHeader(BuildContext context) {
     final color = _getStageColor(stage.name);
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOut,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.06),
+        color: color.withOpacity(0.08),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
         ),
-        border: Border.all(color: color.withOpacity(0.15), width: 1),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: color.withOpacity(0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+          BoxShadow(
+            color: AppColors.shadowLight,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -121,11 +125,18 @@ class StageColumn extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withOpacity(0.2)),
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Text(
               '${tasks.length}',
@@ -142,60 +153,60 @@ class StageColumn extends StatelessWidget {
   }
 
   Widget _buildTasksList(BuildContext context, {bool isMobile = false}) {
-    final content = Container(
-      decoration: BoxDecoration(
-        color: AppColors.bgSecondary,
-        borderRadius: isMobile
-            ? BorderRadius.circular(16)
-            : const BorderRadius.only(
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-        border: Border.all(
-          color: _getStageColor(stage.name).withOpacity(0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: tasks.isEmpty
-                ? _buildEmptyState()
-                : isMobile
-                ? _buildMobileTasksList(context)
-                : _buildDesktopTasksList(context),
-          ),
-          _buildAddTaskArea(context),
-        ],
-      ),
-    );
-
     return DragTarget<Task>(
-      onWillAccept: (task) => task != null && task.stage != stage.id,
-      onAccept: (task) {
-        final targetStage = stage;
-        onTaskMoved?.call(task, targetStage);
+      onWillAcceptWithDetails: (task) {
+        return task.data.stage != stage.id;
       },
+      onAcceptWithDetails: (task) {
+        final targetStage = stage;
+        onTaskMoved?.call(task.data, targetStage);
+      },
+      onLeave: (task) {},
       builder: (context, candidateData, rejectedData) {
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
+          duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
-          foregroundDecoration: candidateData.isNotEmpty
-              ? BoxDecoration(
-                  border: Border.all(
-                    color: _getStageColor(stage.name),
-                    width: 2,
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            borderRadius: isMobile
+                ? BorderRadius.circular(20)
+                : const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
                   ),
-                )
-              : null,
-          child: content,
+            border: Border.all(
+              color: candidateData.isNotEmpty
+                  ? _getStageColor(stage.name)
+                  : _getStageColor(stage.name).withOpacity(0.2),
+              width: candidateData.isNotEmpty ? 3 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: candidateData.isNotEmpty
+                    ? _getStageColor(stage.name).withOpacity(0.3)
+                    : _getStageColor(stage.name).withOpacity(0.05),
+                blurRadius: candidateData.isNotEmpty ? 25 : 20,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: AppColors.shadowLight,
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Expanded(
+                child: tasks.isEmpty
+                    ? _buildEmptyState()
+                    : isMobile
+                    ? _buildMobileTasksList(context)
+                    : _buildDesktopTasksList(context),
+              ),
+              _buildAddTaskArea(context),
+            ],
+          ),
         );
       },
     );
@@ -206,13 +217,25 @@ class StageColumn extends StatelessWidget {
       children: tasks.map((task) {
         return Container(
           margin: const EdgeInsets.all(8.0),
-          child: LongPressDraggable<Task>(
+          child: Draggable<Task>(
             data: task,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            onDragStarted: () {},
+            onDragEnd: (details) {},
             feedback: Material(
               color: Colors.transparent,
-              child: Opacity(
-                opacity: 0.85,
-                child: TaskCard(task: task, onTap: null),
+              child: Transform.scale(
+                scale: 1.05,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: ModernShadows.floating,
+                  ),
+                  child: Opacity(
+                    opacity: 0.9,
+                    child: TaskCard(task: task, onTap: null),
+                  ),
+                ),
               ),
             ),
             childWhenDragging: Opacity(
@@ -221,18 +244,14 @@ class StageColumn extends StatelessWidget {
                 key: ValueKey(task.id),
                 task: task,
                 onTap: () => onTaskTap?.call(task),
-                onEdit: () => onTaskEdit?.call(task),
                 onDelete: () => onTaskDelete?.call(task),
-                onMove: () => _showMoveSheet(context, task),
               ),
             ),
             child: TaskCard(
               key: ValueKey(task.id),
               task: task,
               onTap: () => onTaskTap?.call(task),
-              onEdit: () => onTaskEdit?.call(task),
               onDelete: () => onTaskDelete?.call(task),
-              onMove: () => _showMoveSheet(context, task),
             ),
           ),
         );
@@ -257,13 +276,22 @@ class StageColumn extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 8.0),
           child: Draggable<Task>(
             data: task,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            onDragStarted: () {},
+            onDragEnd: (details) {},
             feedback: Material(
               color: Colors.transparent,
               child: SizedBox(
                 width: 280,
                 child: Transform.scale(
-                  scale: 1.05,
-                  child: Opacity(opacity: 0.9, child: TaskCard(task: task)),
+                  scale: 1.08,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: ModernShadows.floating,
+                    ),
+                    child: Opacity(opacity: 0.95, child: TaskCard(task: task)),
+                  ),
                 ),
               ),
             ),
@@ -272,33 +300,13 @@ class StageColumn extends StatelessWidget {
               child: TaskCard(
                 task: task,
                 onTap: () => onTaskTap?.call(task),
-                onEdit: () => onTaskEdit?.call(task),
                 onDelete: () => onTaskDelete?.call(task),
-                onMove: () => _showMoveSheet(context, task),
-                dragHandle: ReorderableDragStartListener(
-                  index: index,
-                  child: Icon(
-                    Icons.drag_indicator,
-                    color: AppColors.textSecondary,
-                    size: ResponsiveUtils.getResponsiveFontSize(context, 20),
-                  ),
-                ),
               ),
             ),
             child: TaskCard(
               task: task,
               onTap: () => onTaskTap?.call(task),
-              onEdit: () => onTaskEdit?.call(task),
               onDelete: () => onTaskDelete?.call(task),
-              onMove: () => _showMoveSheet(context, task),
-              dragHandle: ReorderableDragStartListener(
-                index: index,
-                child: Icon(
-                  Icons.drag_indicator,
-                  color: AppColors.textSecondary,
-                  size: ResponsiveUtils.getResponsiveFontSize(context, 20),
-                ),
-              ),
             ),
           ),
         );
@@ -381,33 +389,6 @@ class StageColumn extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-
-  Future<void> _showMoveSheet(BuildContext context, Task task) async {
-    final targets = allStages.where((s) => s.id != task.stage).toList();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(title: Text('Переместить в этап')),
-              for (final s in targets)
-                ListTile(
-                  leading: Text(s.icon, style: const TextStyle(fontSize: 18)),
-                  title: Text(s.displayName),
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    onTaskMoved?.call(task, s);
-                  },
-                ),
-            ],
-          ),
-        );
-      },
     );
   }
 
