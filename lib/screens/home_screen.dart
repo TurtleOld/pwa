@@ -4,6 +4,8 @@ import '../models/stage.dart';
 import '../services/task_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/stage_column.dart';
+import '../widgets/responsive_navigation.dart';
+import '../utils/responsive.dart';
 import '../theme/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -113,13 +115,24 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
       } catch (e) {
+        await _refreshData();
+        final updated = _tasks.any((t) => t.id == task.id);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка обновления задачи: $e'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
+          if (updated) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Задача обновлена'),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Ошибка обновления задачи: $e'),
+                backgroundColor: AppColors.danger,
+              ),
+            );
+          }
         }
       }
     }
@@ -153,14 +166,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _moveTaskToStage(Task task, Stage newStage) async {
+    final previousStageId = task.stage;
     try {
       await _taskService.moveTaskToStage(task.id, newStage.id);
       await _refreshData();
     } catch (e) {
-      if (mounted) {
+      // Если запрос упал (например, CORS/сетевая ошибка), проверим факт перемещения
+      await _refreshData();
+      final moved = _tasks.any(
+        (t) => t.id == task.id && t.stage == newStage.id,
+      );
+      if (!moved && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка перемещения задачи: $e'),
+            backgroundColor: AppColors.danger,
+          ),
+        );
+      } else if (moved && mounted && previousStageId != newStage.id) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Задача перемещена'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _reorderTaskInStage(
+    int stageId,
+    int oldIndex,
+    int newIndex,
+  ) async {
+    final stageTasks = _getTasksForStage(stageId);
+    if (oldIndex >= stageTasks.length || newIndex >= stageTasks.length) return;
+
+    final task = stageTasks[oldIndex];
+    final newOrder = newIndex;
+
+    try {
+      await _taskService.updateTaskOrder(task.id, newOrder);
+      await _refreshData();
+    } catch (e) {
+      // В случае ошибки обновляем данные и показываем уведомление
+      await _refreshData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка изменения порядка: $e'),
             backgroundColor: AppColors.danger,
           ),
         );
@@ -194,84 +248,65 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: ResponsiveAppBar(
+          title: 'Task Manager',
+          onSettings: () => Navigator.of(context).pushNamed('/settings'),
+          onLogout: _handleLogout,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     if (_error != null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('Task Manager'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: () => Navigator.of(context).pushNamed('/settings'),
-              tooltip: 'Настройки',
-            ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: _handleLogout,
-              tooltip: 'Выйти',
-            ),
-          ],
+        appBar: ResponsiveAppBar(
+          title: 'Task Manager',
+          onSettings: () => Navigator.of(context).pushNamed('/settings'),
+          onLogout: _handleLogout,
         ),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 64,
-                color: AppColors.danger,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Ошибка загрузки данных',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+          child: ResponsiveContainer(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: AppColors.danger,
                 ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _refreshData,
-                child: const Text('Повторить'),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  'Ошибка загрузки данных',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _refreshData,
+                  child: const Text('Повторить'),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Task Manager'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshData,
-            tooltip: 'Обновить',
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: _createTask,
-            tooltip: 'Создать задачу',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.of(context).pushNamed('/settings'),
-            tooltip: 'Настройки',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _handleLogout,
-            tooltip: 'Выйти',
-          ),
-        ],
+      appBar: ResponsiveAppBar(
+        title: 'Task Manager',
+        onRefresh: _refreshData,
+        onCreateTask: _createTask,
+        onSettings: () => Navigator.of(context).pushNamed('/settings'),
+        onLogout: _handleLogout,
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -282,29 +317,130 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: _stages.isEmpty
-              ? _buildEmptyState()
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _stages.map((stage) {
-                        final stageTasks = _getTasksForStage(stage.id);
-                        return StageColumn(
-                          stage: stage,
-                          tasks: stageTasks,
-                          onTaskMoved: _moveTaskToStage,
-                          onTaskTap: (task) => _editTask(task),
-                          onTaskEdit: _editTask,
-                          onTaskDelete: _deleteTask,
-                          onAddTask: () => _createTaskForStage(stage),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
+          child: _stages.isEmpty ? _buildEmptyState() : _buildKanbanBoard(),
+        ),
+      ),
+      bottomNavigationBar: ResponsiveUtils.isMobile(context)
+          ? ResponsiveNavigation(
+              currentRoute: '/home',
+              onRouteChanged: (route) {
+                if (route == '/settings') {
+                  Navigator.of(context).pushNamed('/settings');
+                }
+              },
+              onLogout: _handleLogout,
+              onRefresh: _refreshData,
+              onCreateTask: _createTask,
+            )
+          : null,
+    );
+  }
+
+  Widget _buildKanbanBoard() {
+    return ResponsiveBuilder(
+      mobile: _buildMobileKanban(),
+      tablet: _buildTabletKanban(),
+      desktop: _buildDesktopKanban(),
+    );
+  }
+
+  Widget _buildMobileKanban() {
+    return SingleChildScrollView(
+      child: Column(
+        children: _stages.map((stage) {
+          final stageTasks = _getTasksForStage(stage.id);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16.0),
+            child: StageColumn(
+              stage: stage,
+              tasks: stageTasks,
+              allStages: _stages,
+              onTaskMoved: _moveTaskToStage,
+              onTaskTap: (task) => _editTask(task),
+              onTaskEdit: _editTask,
+              onTaskDelete: _deleteTask,
+              onTaskReordered: _reorderTaskInStage,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTabletKanban() {
+    final basePadding = ResponsiveUtils.getContentPadding(context);
+    final contentPadding = basePadding.copyWith(
+      right: basePadding.right + 16.0,
+    );
+    final screenWidth = MediaQuery.of(context).size.width;
+    const int cols = 2;
+    final available = screenWidth - contentPadding.left - contentPadding.right;
+    final double columnWidth =
+        (available - (cols * 16.0)) / cols; // 16px суммарные отступы на колонку
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: contentPadding,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _stages.map((stage) {
+            final stageTasks = _getTasksForStage(stage.id);
+            return Container(
+              width: columnWidth,
+              margin: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: StageColumn(
+                stage: stage,
+                tasks: stageTasks,
+                allStages: _stages,
+                onTaskMoved: _moveTaskToStage,
+                onTaskTap: (task) => _editTask(task),
+                onTaskEdit: _editTask,
+                onTaskDelete: _deleteTask,
+                onTaskReordered: _reorderTaskInStage,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopKanban() {
+    final basePadding = ResponsiveUtils.getContentPadding(context);
+    final contentPadding = basePadding.copyWith(
+      right: basePadding.right + 16.0,
+    );
+    final screenType = ResponsiveUtils.getScreenTypeFromContext(context);
+    final int cols = screenType == ScreenType.largeDesktop ? 4 : 3;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final available = screenWidth - contentPadding.left - contentPadding.right;
+    final double columnWidth =
+        (available - (cols * 16.0)) / cols; // 16px суммарные отступы на колонку
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: contentPadding,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _stages.map((stage) {
+            final stageTasks = _getTasksForStage(stage.id);
+            return Container(
+              width: columnWidth,
+              margin: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: StageColumn(
+                stage: stage,
+                tasks: stageTasks,
+                allStages: _stages,
+                onTaskMoved: _moveTaskToStage,
+                onTaskTap: (task) => _editTask(task),
+                onTaskEdit: _editTask,
+                onTaskDelete: _deleteTask,
+                onTaskReordered: _reorderTaskInStage,
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
@@ -312,8 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
+      child: ResponsiveContainer(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -347,37 +482,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _createTaskForStage(Stage stage) async {
-    final result = await _showCreateTaskDialog(initialStage: stage);
-    if (result != null) {
-      try {
-        await _taskService.createTask(
-          name: result['name'] as String,
-          description: result['description'] as String?,
-          stage: stage.id,
-        );
-        await _refreshData();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Задача создана успешно'),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка создания задачи: $e'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        }
-      }
-    }
   }
 
   Future<Map<String, dynamic>?> _showCreateTaskDialog({
