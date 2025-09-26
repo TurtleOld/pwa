@@ -3,6 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
 import '../models/user.dart';
 import 'settings_service.dart';
+import 'di.dart';
+import 'app_logger.dart';
 
 class AuthService {
   static const String _tokenKey = 'auth_token';
@@ -12,12 +14,49 @@ class AuthService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final SettingsService _settingsService = SettingsService();
   late final Dio _dio;
+  final AppLogger _logger = di<AppLogger>();
 
   AuthService() {
     _dio = Dio();
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
     _dio.options.sendTimeout = const Duration(seconds: 10);
+
+    // Network logging
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          _logger.network(
+            'request',
+            payload: {
+              'method': options.method,
+              'path': options.path,
+              'query': options.queryParameters,
+              'headers': options.headers,
+            },
+          );
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          _logger.network(
+            'response',
+            payload: {
+              'status': response.statusCode,
+              'path': response.realUri.path,
+            },
+          );
+          handler.next(response);
+        },
+        onError: (e, handler) {
+          _logger.error(
+            'request error',
+            exception: e,
+            stackTrace: e.stackTrace,
+          );
+          handler.next(e);
+        },
+      ),
+    );
   }
 
   Future<User?> login(String username, String password) async {
@@ -52,6 +91,7 @@ class AuthService {
         if (userData != null) {
           final user = User.fromJson(userData).copyWith(token: token);
           await _saveUserData(user, expiry);
+          _logger.info('login success', payload: {'user': user.username});
           return user;
         } else {
           // Если нет данных пользователя в ответе, создаем минимального пользователя
@@ -63,11 +103,19 @@ class AuthService {
             token: token,
           );
           await _saveUserData(user, expiry);
+          _logger.info(
+            'login success (minimal user)',
+            payload: {'user': user.username},
+          );
           return user;
         }
       } else {
         final errorData = response.data;
         final errorMessage = _parseErrorMessage(errorData);
+        _logger.warning(
+          'login failed',
+          payload: {'status': response.statusCode, 'message': errorMessage},
+        );
         throw Exception(errorMessage);
       }
     } catch (e) {
@@ -93,11 +141,11 @@ class AuthService {
           } else if (statusCode == 500) {
             throw Exception('Внутренняя ошибка сервера');
           } else {
-            throw Exception('Ошибка сервера: $statusCode');
+            throw Exception('Ошибка сервера');
           }
         }
       }
-
+      _logger.error('login exception', exception: e as Object?);
       if (e.toString().contains('Exception:')) {
         rethrow;
       }
@@ -130,12 +178,14 @@ class AuthService {
       await _storage.delete(key: _tokenKey);
       await _storage.delete(key: _userKey);
       await _storage.delete(key: _expiryKey);
+      _logger.info('logout success');
     } catch (e) {
       // Очищаем локальные данные даже если API запрос не удался
       await _storage.delete(key: _tokenKey);
       await _storage.delete(key: _userKey);
       await _storage.delete(key: _expiryKey);
-      throw Exception('Ошибка выхода: $e');
+      _logger.error('logout error', exception: e as Object?);
+      throw Exception('Ошибка выхода');
     }
   }
 
@@ -187,7 +237,7 @@ class AuthService {
         await _storage.write(key: _expiryKey, value: expiry);
       }
     } catch (e) {
-      throw Exception('Ошибка сохранения данных: $e');
+      throw Exception('Ошибка сохранения данных');
     }
   }
 

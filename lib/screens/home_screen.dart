@@ -9,6 +9,9 @@ import '../widgets/modern_dialog.dart';
 import '../utils/responsive.dart';
 import '../utils/animations.dart';
 import '../theme/app_colors.dart';
+import '../services/di.dart';
+import '../services/app_logger.dart';
+import '../services/ui_notifier.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +23,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TaskService _taskService = TaskService();
   final AuthService _authService = AuthService();
+  final AppLogger _logger = di<AppLogger>();
+  final UiNotifier _notifier = di<UiNotifier>();
 
   List<Task> _tasks = [];
   List<Stage> _stages = [];
@@ -53,6 +58,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _tasks = tasks;
         _isLoading = false;
       });
+      _logger.info(
+        'home data loaded',
+        payload: {'stages': stages.length, 'tasks': tasks.length},
+      );
     } catch (e) {
       String errorMessage = e.toString();
 
@@ -84,6 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
         _error = errorMessage;
         _isLoading = false;
       });
+      _logger.error('home load error', exception: e as Object?);
+      if (mounted) {
+        _notifier.showError(context, errorMessage);
+      }
     }
   }
 
@@ -102,22 +115,11 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         await _refreshData();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Задача создана успешно'),
-              backgroundColor: AppColors.success,
-            ),
-          );
+          _notifier.showSuccess(context, 'Задача создана успешно');
         }
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка создания задачи: $e'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        }
+        _logger.error('create task error', exception: e as Object?);
+        if (mounted) _notifier.showError(context, 'Ошибка создания задачи');
       }
     }
   }
@@ -135,31 +137,17 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         await _refreshData();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Задача обновлена успешно'),
-              backgroundColor: AppColors.success,
-            ),
-          );
+          _notifier.showSuccess(context, 'Задача обновлена успешно');
         }
       } catch (e) {
         await _refreshData();
         final updated = _tasks.any((t) => t.id == task.id);
         if (mounted) {
           if (updated) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Задача обновлена'),
-                backgroundColor: AppColors.success,
-              ),
-            );
+            _notifier.showSuccess(context, 'Задача обновлена');
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Ошибка обновления задачи: $e'),
-                backgroundColor: AppColors.danger,
-              ),
-            );
+            _logger.error('update task error', exception: e as Object?);
+            _notifier.showError(context, 'Ошибка обновления задачи');
           }
         }
       }
@@ -173,22 +161,11 @@ class _HomeScreenState extends State<HomeScreen> {
         await _taskService.deleteTask(task.id);
         await _refreshData();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Задача удалена успешно'),
-              backgroundColor: AppColors.success,
-            ),
-          );
+          _notifier.showSuccess(context, 'Задача удалена успешно');
         }
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка удаления задачи: $e'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        }
+        _logger.error('delete task error', exception: e as Object?);
+        if (mounted) _notifier.showError(context, 'Ошибка удаления задачи');
       }
     }
   }
@@ -211,13 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await _taskService.moveTaskToStage(task.id, newStage.id);
       // Успешно - показываем уведомление
       if (mounted && previousStageId != newStage.id) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Задача перемещена'),
-            backgroundColor: AppColors.success,
-            duration: Duration(seconds: 2),
-          ),
-        );
+        _notifier.showSuccess(context, 'Задача перемещена');
       }
     } catch (e) {
       // Проверяем, не была ли задача все-таки перемещена на сервере
@@ -241,13 +212,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           if (updatedTask.stage == newStage.id) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Задача перемещена успешно'),
-                  backgroundColor: AppColors.success,
-                  duration: Duration(seconds: 2),
-                ),
-              );
+              _notifier.showSuccess(context, 'Задача перемещена успешно');
             }
             return; // Выходим, не откатывая изменения
           } else {}
@@ -281,16 +246,11 @@ class _HomeScreenState extends State<HomeScreen> {
           errorMessage =
               'Сервер вернул пустой ответ. Задача может быть перемещена.';
         } else {
-          errorMessage = 'Ошибка перемещения задачи: $e';
+          errorMessage = 'Ошибка перемещения задачи. Попробуйте еще раз.';
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.danger,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        _logger.error('move task ui error', exception: e as Object?);
+        _notifier.showError(context, errorMessage);
       }
     }
   }
@@ -330,15 +290,8 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка изменения порядка: $e'),
-            backgroundColor: AppColors.danger,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
+      if (mounted) _notifier.showError(context, 'Ошибка изменения порядка');
+      _logger.error('reorder task error', exception: e as Object?);
     }
   }
 
@@ -349,14 +302,8 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.of(context).pushReplacementNamed('/login');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ошибка выхода: $e'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
-      }
+      _logger.error('logout ui error', exception: e as Object?);
+      if (mounted) _notifier.showError(context, 'Ошибка выхода');
     }
   }
 

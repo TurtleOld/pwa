@@ -1,12 +1,34 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'services/auth_service.dart';
+import 'services/di.dart';
+import 'services/app_logger.dart';
+import 'lib_router_observer.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
-  runApp(const TaskManagerApp());
+  setupDependencies();
+  final logger = di<AppLogger>();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    logger.error(
+      'FlutterError',
+      exception: details.exception,
+      stackTrace: details.stack,
+    );
+  };
+
+  runZonedGuarded(
+    () => runApp(const TaskManagerApp()),
+    (error, stack) => logger.error(
+      'Uncaught zone error',
+      exception: error,
+      stackTrace: stack,
+    ),
+  );
 }
 
 class TaskManagerApp extends StatelessWidget {
@@ -25,6 +47,7 @@ class TaskManagerApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/settings': (context) => const SettingsScreen(),
       },
+      navigatorObservers: [AppRouteObserver()],
       debugShowCheckedModeBanner: false,
     );
   }
@@ -66,9 +89,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(
-          child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return _isAuthenticated ? const HomeScreen() : const LoginScreen();

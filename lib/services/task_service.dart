@@ -5,17 +5,54 @@ import '../models/task.dart';
 import '../models/stage.dart';
 import 'auth_service.dart';
 import 'settings_service.dart';
+import 'di.dart';
+import 'app_logger.dart';
 
 class TaskService {
   final AuthService _authService = AuthService();
   final SettingsService _settingsService = SettingsService();
   late final Dio _dio;
+  final AppLogger _logger = di<AppLogger>();
 
   TaskService() {
     _dio = Dio();
     _dio.options.connectTimeout = const Duration(seconds: 10);
     _dio.options.receiveTimeout = const Duration(seconds: 10);
     _dio.options.sendTimeout = const Duration(seconds: 10);
+
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          _logger.network(
+            'request',
+            payload: {
+              'method': options.method,
+              'path': options.path,
+              'query': options.queryParameters,
+            },
+          );
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          _logger.network(
+            'response',
+            payload: {
+              'status': response.statusCode,
+              'path': response.realUri.path,
+            },
+          );
+          handler.next(response);
+        },
+        onError: (e, handler) {
+          _logger.error(
+            'request error',
+            exception: e,
+            stackTrace: e.stackTrace,
+          );
+          handler.next(e);
+        },
+      ),
+    );
   }
 
   Future<String> _getApiBaseUrl() async {
@@ -45,6 +82,7 @@ class TaskService {
       }
       return null;
     } catch (e) {
+      _logger.error('getTaskById failed', exception: e as Object?);
       return null;
     }
   }
@@ -68,7 +106,8 @@ class TaskService {
         );
       }
     } catch (e) {
-      throw Exception('Ошибка получения задач: $e');
+      _logger.error('getTasks error', exception: e as Object?);
+      throw Exception('Ошибка получения задач');
     }
   }
 
@@ -91,6 +130,10 @@ class TaskService {
       }
     } catch (e) {
       // В случае ошибки возвращаем дефолтные этапы
+      _logger.error(
+        'getStages error, return defaults',
+        exception: e as Object?,
+      );
       return _getDefaultStages();
     }
   }
@@ -132,7 +175,8 @@ class TaskService {
         );
       }
     } catch (e) {
-      throw Exception('Ошибка создания задачи: $e');
+      _logger.error('createTask error', exception: e as Object?);
+      throw Exception('Ошибка создания задачи');
     }
   }
 
@@ -186,7 +230,7 @@ class TaskService {
             if (fallback != null) {
               return fallback;
             }
-            throw Exception('Ошибка парсинга ответа сервера: $e');
+            throw Exception('Ошибка обработки ответа сервера');
           }
         }
         final fallback = await getTaskById(taskId);
@@ -198,7 +242,8 @@ class TaskService {
         );
       }
     } catch (e) {
-      throw Exception('Ошибка обновления задачи: $e');
+      _logger.error('updateTask error', exception: e as Object?);
+      throw Exception('Ошибка обновления задачи');
     }
   }
 
@@ -214,10 +259,11 @@ class TaskService {
       );
 
       if (response.statusCode != 204) {
-        throw Exception('Ошибка удаления задачи: ${response.statusCode}');
+        throw Exception('Ошибка удаления задачи');
       }
     } catch (e) {
-      throw Exception('Ошибка удаления задачи: $e');
+      _logger.error('deleteTask error', exception: e as Object?);
+      throw Exception('Ошибка удаления задачи');
     }
   }
 
@@ -265,7 +311,7 @@ class TaskService {
             if (fallback != null) {
               return fallback;
             }
-            throw Exception('Ошибка парсинга ответа сервера: $e');
+            throw Exception('Ошибка обработки ответа сервера');
           }
         }
         final maybe = await getTaskById(taskId);
@@ -298,7 +344,8 @@ class TaskService {
       }
 
       final errorMessage = _getNetworkErrorMessage(e);
-      throw Exception('Ошибка перемещения задачи: $errorMessage');
+      _logger.error('moveTaskToStage error', exception: e as Object?);
+      throw Exception('Ошибка перемещения задачи');
     }
   }
 
@@ -317,11 +364,12 @@ class TaskService {
       );
 
       if (response.statusCode != 200) {
-        throw Exception('Ошибка обновления порядка: ${response.statusCode}');
+        throw Exception('Ошибка обновления порядка');
       }
     } catch (e) {
       final errorMessage = _getNetworkErrorMessage(e);
-      throw Exception('Ошибка обновления порядка: $errorMessage');
+      _logger.error('updateTaskOrder error', exception: e as Object?);
+      throw Exception('Ошибка обновления порядка');
     }
   }
 
@@ -331,7 +379,8 @@ class TaskService {
       return allTasks.where((task) => task.stage == stageId).toList()
         ..sort((a, b) => a.order.compareTo(b.order));
     } catch (e) {
-      throw Exception('Ошибка получения задач по этапу: $e');
+      _logger.error('getTasksByStage error', exception: e as Object?);
+      throw Exception('Ошибка получения задач по этапу');
     }
   }
 
@@ -353,7 +402,8 @@ class TaskService {
 
       return stats;
     } catch (e) {
-      throw Exception('Ошибка получения статистики: $e');
+      _logger.error('getTaskStats error', exception: e as Object?);
+      throw Exception('Ошибка получения статистики');
     }
   }
 

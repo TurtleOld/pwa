@@ -41,6 +41,13 @@ dependencies:
   # Secure storage for authentication tokens
   flutter_secure_storage: ^9.0.0
 
+  # Dependency injection
+  get_it: ^7.6.7
+
+  # Logging
+  talker: ^4.2.5
+  talker_flutter: ^4.2.5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

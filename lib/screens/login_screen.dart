@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/di.dart';
+import '../services/app_logger.dart';
+import '../services/ui_notifier.dart';
 import '../utils/responsive.dart';
 import '../widgets/responsive_navigation.dart';
 import '../theme/app_colors.dart';
@@ -17,6 +20,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
+  final AppLogger _logger = di<AppLogger>();
+  final UiNotifier _notifier = di<UiNotifier>();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -48,17 +53,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         if (user != null) {
+          _logger.info('navigate: home after login');
           Navigator.of(context).pushReplacementNamed('/home');
         } else {
           setState(() {
             _errorMessage = 'Ошибка авторизации';
           });
+          _notifier.showError(context, 'Не удалось войти');
         }
       }
     } catch (e) {
+      _logger.error('login ui error', exception: e as Object?);
       setState(() {
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
+      _notifier.showError(context, _errorMessage ?? 'Ошибка авторизации');
     } finally {
       if (mounted) {
         setState(() {
